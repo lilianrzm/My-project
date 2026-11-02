@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tareas">
+  <meta name="theme-color" content="#f5f6fa">
+  <title>Mis tareas</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1>Mis tareas</h1>
+      <p id="contador" class="contador">0 pendientes</p>
+    </header>
+
+    <form id="formulario" class="formulario" autocomplete="off">
+      <label for="nueva-tarea" class="visually-hidden">Nueva tarea</label>
+      <input id="nueva-tarea" type="text" placeholder="¿Qué tienes que hacer?" maxlength="200" required>
+      <button type="submit">Agregar</button>
+    </form>
+
+    <ul id="lista" class="lista"></ul>
+
+    <p id="vacio" class="vacio">No hay tareas todavía. ¡Agrega la primera!</p>
+
+    <button id="limpiar" class="limpiar" type="button" hidden>Borrar tareas hechas</button>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
