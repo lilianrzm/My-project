@@ -1,0 +1,109 @@
+/*
+ * The Daily Edit — tokens de diseño.
+ * Todos los colores, radios, sombras y tiempos se usan desde aquí.
+ */
+:root {
+  /* Paleta de marca */
+  --c-warm-white: #faf9f6; /* Fondo principal */
+  --c-powder-pink: #f2dde2; /* Acento delicado */
+  --c-olive: #81866a; /* Acento principal (decorativo, iconos, progreso) */
+  --c-beige: #e8e4db; /* Superficies secundarias */
+  --c-graphite: #393b35; /* Texto principal */
+  --c-white: #ffffff; /* Tarjetas */
+
+  /* Derivados (contraste AA) */
+  --c-olive-strong: #61664d; /* botones y texto en olivo: 5.97:1 sobre blanco */
+  --c-olive-deep: #4f533e; /* hover/active */
+  --c-olive-soft: #e9eae1; /* fondos suaves verde salvia */
+  --c-sage: #a7b09a;
+  --c-pink-soft: #f8edf0;
+  --c-pink-strong: #b9707f; /* bordes/indicadores, no texto pequeño */
+  --c-beige-soft: #f3f1eb;
+  --c-muted: #64655d; /* texto secundario: ≥4.5:1 sobre fondo y beige suave */
+  --c-faint: #8a8b82; /* solo texto no esencial / placeholders */
+  --c-danger: #a1453f; /* vencidas, acciones destructivas */
+  --c-danger-soft: #f7e7e4;
+
+  /* Roles semánticos */
+  --bg: var(--c-warm-white);
+  --bg-sidebar: var(--c-beige-soft);
+  --surface: var(--c-white);
+  --surface-2: var(--c-beige-soft);
+  --surface-3: var(--c-beige);
+  --text: var(--c-graphite);
+  --text-2: var(--c-muted);
+  --text-3: var(--c-faint);
+  --accent: var(--c-olive);
+  --accent-strong: var(--c-olive-strong);
+  --accent-deep: var(--c-olive-deep);
+  --accent-soft: var(--c-olive-soft);
+  --highlight: var(--c-powder-pink);
+  --highlight-soft: var(--c-pink-soft);
+  --border: #e8e4db;
+  --border-strong: #d8d3c7;
+  --hairline: rgba(57, 59, 53, 0.08);
+  --focus: #61664d;
+  --overlay: rgba(57, 59, 53, 0.28);
+
+  /* Tipografía */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: 'DM Serif Display', 'New York', 'Iowan Old Style', Georgia, serif;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.75rem;
+  --fs-display: clamp(2.1rem, 1.6rem + 1.6vw, 2.9rem);
+
+  /* Espaciado */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* Forma */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(57, 59, 53, 0.04);
+  --shadow-2: 0 1px 2px rgba(57, 59, 53, 0.04), 0 8px 24px rgba(57, 59, 53, 0.06);
+  --shadow-3: 0 2px 6px rgba(57, 59, 53, 0.06), 0 18px 48px rgba(57, 59, 53, 0.12);
+
+  /* Movimiento */
+  --t-fast: 150ms;
+  --t-base: 200ms;
+  --t-slow: 250ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Tamaños */
+  --tap: 44px;
+  --sidebar-w: 264px;
+  --detail-w: 400px;
+  --bottom-nav-h: 64px;
+  --row-pad-y: 12px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+[data-density='compact'] {
+  --row-pad-y: 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-base: 0ms;
+    --t-slow: 0ms;
+  }
+}
