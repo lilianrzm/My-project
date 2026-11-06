@@ -129,11 +129,28 @@ kbd {
 /* Tipografía editorial */
 .display {
   font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: var(--fs-display);
+  font-size: calc(var(--fs-display) * var(--display-scale));
   line-height: 1.08;
-  letter-spacing: -0.01em;
   color: var(--text);
+}
+
+/* Todo lo que usa la fuente de títulos adopta el peso y espaciado de la combinación activa */
+.display,
+.brand-name,
+.empty-title,
+.modal-title,
+.hero-sub,
+.summary-big,
+.detail-title,
+.project-card-name,
+.stat-num,
+.serif-name,
+.preview-grid dd,
+.page-settings .card-title,
+.kpi-value,
+.font-sample-title {
+  font-weight: var(--display-weight) !important;
+  letter-spacing: var(--display-tracking);
 }
 
 .title-sans {

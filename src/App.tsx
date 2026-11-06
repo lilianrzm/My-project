@@ -15,6 +15,7 @@ import { CalendarPage } from './pages/Calendar';
 import { CompletedPage, SearchPage } from './pages/Completed';
 import { ReviewPage } from './pages/Review';
 import { SettingsPage } from './pages/Settings';
+import { applyAppearance, isPreviewing } from './theme';
 
 function Page() {
   const { route } = useUI();
@@ -64,6 +65,11 @@ export function App() {
   const mainRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
   useShortcuts();
+
+  // Aplica la apariencia guardada (y la refleja para el arranque sin destellos)
+  useEffect(() => {
+    if (!isPreviewing()) applyAppearance(settings.appearance, true);
+  }, [settings.appearance]);
 
   // Al cambiar de sección: volver arriba, actualizar el título y mover el foco al encabezado (lectores de pantalla)
   useEffect(() => {

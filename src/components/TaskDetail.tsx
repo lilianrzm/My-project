@@ -13,7 +13,6 @@ import {
 import type { Priority, Recurrence, Subtask, Task } from '../domain/types';
 import { PRIORITY_LABEL } from '../domain/types';
 import { formatTimestamp } from '../domain/dates';
-import { newId } from '../domain/validate';
 import * as repo from '../db/repo';
 import { useData } from '../state/data';
 import { useFeedback, useUI } from '../state/ui';
@@ -147,7 +146,7 @@ function TaskDetail({ task, onClose }: { task: Task; onClose: () => void }) {
   const addSub = () => {
     const t = newSub.trim();
     if (!t) return;
-    setSubtasks([...task.subtasks, { id: newId(), title: t, done: false }]);
+    setSubtasks([...task.subtasks, repo.newSubtask(t)]);
     setNewSub('');
   };
 

@@ -47,7 +47,7 @@ export function useTaskActions() {
           const removed = await repo.deleteTasks(tasks.map((t) => t.id));
           selectTask(null);
           toast({
-            message: removed.length === 1 ? 'Tarea eliminada' : `${removed.length} tareas eliminadas`,
+            message: removed.tasks.length === 1 ? 'Tarea eliminada' : `${removed.tasks.length} tareas eliminadas`,
             action: { label: 'Deshacer', run: () => void safe(() => repo.restoreTasks(removed)) },
             duration: 7000,
           });

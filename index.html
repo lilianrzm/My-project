@@ -16,6 +16,21 @@
     <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
+    <script>
+      // Aplica la apariencia guardada antes de pintar (evita el destello del tema predeterminado).
+      (function () {
+        try {
+          var a = JSON.parse(localStorage.getItem('tde-appearance') || 'null');
+          if (!a) return;
+          var el = document.documentElement;
+          if (/^(olive|rose|sage|blue)$/.test(a.palette)) el.dataset.palette = a.palette;
+          if (/^(playful|editorial|clean)$/.test(a.font)) el.dataset.font = a.font;
+          if (/^(soft|round)$/.test(a.radius)) el.dataset.radius = a.radius;
+          var bg = { olive: '#FAF9F6', rose: '#FFF9F7', sage: '#FAF9F3', blue: '#FAFAF7' }[a.palette];
+          if (bg) document.querySelector('meta[name="theme-color"]').setAttribute('content', bg);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

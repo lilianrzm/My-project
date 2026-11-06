@@ -117,6 +117,16 @@ await page.click('text=Pagar tarjeta');
 await page.waitForSelector('.detail.is-open');
 await page.locator('.detail select').filter({ has: page.locator('option[value=monthly]') }).selectOption('monthly');
 await page.waitForTimeout(400);
+// Regla 2.0: no se puede cerrar con subtareas pendientes
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+await page.click('.task-row:has-text("Pagar tarjeta") .check');
+await page.waitForTimeout(300);
+ok(await page.locator('.toast:has-text("subtarea pendiente")').isVisible(), 'impide completar con subtareas pendientes');
+await page.click('text=Pagar tarjeta');
+await page.waitForSelector('.detail.is-open');
+await page.click('.detail .subtask .check');
+await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(200);
 await page.click('.task-row:has-text("Pagar tarjeta") .check');
@@ -187,7 +197,7 @@ ok(/^the-daily-edit-backup-\d{4}-\d{2}-\d{2}\.json$/.test(name), `nombre del res
 const path = `${OUT}/${name}`;
 await download.saveAs(path);
 const backup = JSON.parse(readFileSync(path, 'utf8'));
-ok(backup.format === 'the-daily-edit-backup' && backup.formatVersion === 1 && backup.data.tasks.length === 8, `respaldo contiene versión y todas las tareas (${backup.data.tasks.length})`);
+ok(backup.format === 'the-daily-edit-backup' && backup.formatVersion === 2 && backup.data.tasks.length === 8, `respaldo contiene versión y todas las tareas (${backup.data.tasks.length})`);
 ok(backup.data.projects.length === 1 && backup.data.categories.length === 6 && backup.data.tags.length === 1, 'respaldo contiene proyectos, categorías y etiquetas');
 
 // --- Borrar datos, importar (reemplazo) ---

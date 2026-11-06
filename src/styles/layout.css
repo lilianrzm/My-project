@@ -302,7 +302,7 @@
     z-index: 30;
     height: calc(var(--bottom-nav-h) + var(--safe-bottom));
     padding: 0 max(var(--sp-2), var(--safe-right)) var(--safe-bottom) max(var(--sp-2), var(--safe-left));
-    background: rgba(250, 249, 246, 0.94);
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
     -webkit-backdrop-filter: saturate(140%) blur(14px);
     backdrop-filter: saturate(140%) blur(14px);
     border-top: 1px solid var(--hairline);
@@ -373,7 +373,7 @@
   background: var(--accent-strong);
   color: #fff;
   box-shadow:
-    0 6px 18px rgba(79, 83, 62, 0.28),
+    0 6px 18px var(--fab-shadow),
     0 1px 3px rgba(57, 59, 53, 0.12);
   transition:
     transform var(--t-fast) var(--ease),

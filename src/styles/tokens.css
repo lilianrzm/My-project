@@ -42,12 +42,30 @@
   --border: #e8e4db;
   --border-strong: #d8d3c7;
   --hairline: rgba(57, 59, 53, 0.08);
-  --focus: #61664d;
+  --focus: var(--c-olive-strong);
   --overlay: rgba(57, 59, 53, 0.28);
+  --accent-ring: color-mix(in srgb, var(--c-olive) 22%, transparent);
+  --fab-shadow: color-mix(in srgb, var(--c-olive-deep) 30%, transparent);
+  --row-hover: color-mix(in srgb, var(--c-warm-white) 60%, white);
+  --cal-outside: color-mix(in srgb, var(--c-warm-white) 70%, white);
+  --danger-deep: #8a3a35;
+  /* Serie de colores para gráficas (derivada del tema activo) */
+  --chart-1: var(--c-olive);
+  --chart-2: var(--c-pink-strong);
+  --chart-3: var(--c-sage);
+  --chart-4: #c9b8a3;
+  --chart-5: #9db0bf;
+  --chart-6: #b7a6c4;
 
-  /* Tipografía */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-serif: 'DM Serif Display', 'New York', 'Iowan Old Style', Georgia, serif;
+  /* Tipografía (combinación predeterminada: Playful Minimalism) */
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', var(--font-system);
+  /* --font-serif = fuente de títulos (se conserva el nombre por compatibilidad) */
+  --font-serif: 'Outfit', var(--font-system);
+  --display-weight: 500;
+  --display-tracking: -0.025em;
+  --display-italic: normal;
+  --display-scale: 1;
   --fs-xs: 0.75rem;
   --fs-sm: 0.8125rem;
   --fs-base: 0.9375rem;
@@ -106,4 +124,87 @@
     --t-base: 0ms;
     --t-slow: 0ms;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Combinaciones tipográficas                                           */
+/* ------------------------------------------------------------------ */
+[data-font='editorial'] {
+  --font-sans: 'Instrument Sans', var(--font-system);
+  --font-serif: 'Instrument Serif', 'New York', Georgia, serif;
+  --display-weight: 400;
+  --display-tracking: -0.01em;
+  --display-italic: italic;
+  --display-scale: 1.08;
+}
+[data-font='clean'] {
+  --font-sans: 'Inter', var(--font-system);
+  --font-serif: 'Inter', var(--font-system);
+  --display-weight: 600;
+  --display-tracking: -0.03em;
+  --display-italic: normal;
+  --display-scale: 0.94;
+}
+
+/* ------------------------------------------------------------------ */
+/* Paletas (todas claras; texto grafito y acentos fuertes ≥ 4.5:1)       */
+/* ------------------------------------------------------------------ */
+[data-palette='rose'] {
+  --c-warm-white: #fff9f7;
+  --c-powder-pink: #f4dce2;
+  --c-olive: #ad7785;
+  --c-olive-strong: #805862;
+  --c-olive-deep: #69484f;
+  --c-olive-soft: #f2e9eb;
+  --c-sage: #cfa9b3;
+  --c-pink-soft: #faeff2;
+  --c-pink-strong: #c48a98;
+  --c-beige-soft: #fbf2f1;
+  --c-beige: #efe2e0;
+  --border: #ecdcdb;
+  --border-strong: #dccac9;
+  --chart-3: #d9b8a8;
+}
+[data-palette='sage'] {
+  --c-warm-white: #faf9f3;
+  --c-powder-pink: #e5ead9;
+  --c-olive: #718878;
+  --c-olive-strong: #56675b;
+  --c-olive-deep: #46544a;
+  --c-olive-soft: #e8ece9;
+  --c-sage: #a9b99a;
+  --c-pink-soft: #f3f6ee;
+  --c-pink-strong: #8fa596;
+  --c-beige-soft: #f3f4ea;
+  --c-beige: #e2e6d7;
+  --border: #e1e4d6;
+  --border-strong: #cfd3c3;
+  --chart-2: #d9a9b4;
+}
+[data-palette='blue'] {
+  --c-warm-white: #fafaf7;
+  --c-powder-pink: #e4eaf0;
+  --c-olive: #758ba1;
+  --c-olive-strong: #546474;
+  --c-olive-deep: #44525f;
+  --c-olive-soft: #e9ecf0;
+  --c-sage: #a7b8c8;
+  --c-pink-soft: #f3f6f8;
+  --c-pink-strong: #93a6b9;
+  --c-beige-soft: #f2f4f4;
+  --c-beige: #e1e6ea;
+  --border: #e0e5e9;
+  --border-strong: #cdd4da;
+  --chart-2: #d9a9b4;
+  --chart-3: #a7b09a;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bordes                                                               */
+/* ------------------------------------------------------------------ */
+[data-radius='round'] {
+  --r-sm: 11px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
 }

@@ -22,12 +22,14 @@ import { errorMessage } from '../hooks/useTaskActions';
 import { Modal, PageHeader, SORT_LABEL } from '../components/ui';
 import { ColorPicker } from './Projects';
 import { Logo } from '../components/Logo';
+import { AppearanceCard } from './SettingsAppearance';
 
 export function SettingsPage() {
   return (
     <div className="page page-settings">
       <PageHeader eyebrow="Ajustes" title="Configuración" subtitle="Todo se guarda solo en este dispositivo." />
       <PreferencesCard />
+      <AppearanceCard />
       <BackupCard />
       <CategoriesCard />
       <TagsCard />
