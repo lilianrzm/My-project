@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
+  BarChart3,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
@@ -51,6 +52,7 @@ function useNavItems(): NavItem[] {
     { name: 'projects', label: 'Proyectos', icon: <FolderClosed size={19} /> },
     { name: 'calendar', label: 'Calendario', icon: <CalendarDays size={19} /> },
     { name: 'completed', label: 'Completadas', icon: <CheckCircle2 size={19} /> },
+    { name: 'analysis', label: 'Análisis', icon: <BarChart3 size={19} /> },
     { name: 'settings', label: 'Configuración', icon: <SettingsIcon size={19} /> },
   ];
 }

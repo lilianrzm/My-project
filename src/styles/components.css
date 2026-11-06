@@ -1285,3 +1285,7 @@ input[type='search']::-webkit-search-cancel-button {
 .qa-hint {
   font-size: var(--fs-xs);
 }
+.meta-chip.is-cancelled {
+  color: var(--c-danger);
+  font-weight: 500;
+}

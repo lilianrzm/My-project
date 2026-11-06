@@ -324,6 +324,7 @@ export function normalizeSettings(v: unknown): Settings {
     analytics: {
       order: Array.isArray((s.analytics as Obj | undefined)?.order) ? ((s.analytics as Obj).order as unknown[]).filter(isId).slice(0, 50) : [],
       hidden: Array.isArray((s.analytics as Obj | undefined)?.hidden) ? ((s.analytics as Obj).hidden as unknown[]).filter(isId).slice(0, 50) : [],
+      columns: Array.isArray((s.analytics as Obj | undefined)?.columns) ? ((s.analytics as Obj).columns as unknown[]).filter(isId).slice(0, 200) : [],
     },
   };
 }

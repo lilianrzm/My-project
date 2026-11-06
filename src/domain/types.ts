@@ -206,6 +206,8 @@ export type TodayGroupBy = 'none' | 'category' | 'project' | 'priority';
 export interface AnalyticsLayout {
   order: string[];
   hidden: string[];
+  /** Columnas visibles en la tabla de registros (vacío = predeterminadas). */
+  columns: string[];
 }
 
 export interface Settings {
@@ -265,7 +267,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closurePrompt: true,
   closureResults: DEFAULT_CLOSURE_RESULTS,
   attentionTypes: DEFAULT_ATTENTION_TYPES,
-  analytics: { order: [], hidden: [] },
+  analytics: { order: [], hidden: [], columns: [] },
 };
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {

@@ -96,7 +96,12 @@ export async function extractText(blob: Blob, name: string): Promise<ExtractResu
       const bytes = new Uint8Array(await blob.arrayBuffer());
       if (kind === 'docx') text = docxText(bytes);
       else if (kind === 'xlsx') text = xlsxText(bytes);
-      else text = await pdfText(bytes);
+      else
+        text = await Promise.race([
+          pdfText(bytes),
+          // Nunca dejar un documento "leyendo" indefinidamente
+          new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 60_000)),
+        ]);
     }
     const clean = text.replace(/\u0000/g, '').trim();
     if (clean.replace(/\s/g, '').length < 20) return { status: kind === 'pdf' ? 'needs-ocr' : 'no-text', text: clean };

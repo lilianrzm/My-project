@@ -150,7 +150,7 @@ export function CalendarPage() {
                         <li key={t.id}>
                           <button
                             type="button"
-                            className={`cal-item${t.status === 'completed' ? ' is-done' : ''}${t.status === 'open' && d < today ? ' is-overdue' : ''}`}
+                            className={`cal-item${t.status !== 'open' ? ' is-done' : ''}${t.status === 'open' && d < today ? ' is-overdue' : ''}`}
                             style={{ '--c': t.projectId ? projectById.get(t.projectId)?.color : undefined } as CSSProperties}
                             onClick={() => {
                               setSelected(d);

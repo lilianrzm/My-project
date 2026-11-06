@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
-import { CalendarRange, Inbox as InboxIcon, Plus, Sun } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CalendarRange, ChevronDown, Inbox as InboxIcon, Plus, Sun } from 'lucide-react';
+import type { Task, TodayGroupBy } from '../domain/types';
+import { saveSettings } from '../db/repo';
 import { useData } from '../state/data';
 import { useUI } from '../state/ui';
 import { addDays, formatLong } from '../domain/dates';
-import { completedOn, groupUpcoming, isForToday, isInbox, isOverdue } from '../domain/selectors';
+import { completedOn, groupTasks, groupUpcoming, isForToday, isInbox, isOverdue } from '../domain/selectors';
 import { useListView } from '../hooks/useListView';
 import { TaskList } from '../components/TaskList';
 import { EmptyState, ListToolbar, PageHeader, Section } from '../components/ui';
@@ -58,8 +60,47 @@ export function InboxPage() {
   );
 }
 
+const COLLAPSE_KEY = 'tde-today-collapsed';
+
+/** Grupo plegable de Hoy. Recuerda si está contraído (preferencia de este dispositivo). */
+function TodayGroup({ id, title, color, tasks, reorderable }: { id: string; title: string; color?: string; tasks: Task[]; reorderable: boolean }) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return (JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]') as string[]).includes(id);
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      const list = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]') as string[]);
+      if (next) list.add(id);
+      else list.delete(id);
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...list]));
+    } catch {
+      /* opcional */
+    }
+  };
+  return (
+    <Section
+      title={
+        <button type="button" className="group-toggle" aria-expanded={!collapsed} onClick={toggle}>
+          <ChevronDown size={15} aria-hidden="true" className={collapsed ? 'is-collapsed' : ''} />
+          {color && <span className="dot" style={{ background: color }} aria-hidden="true" />}
+          {title}
+        </button>
+      }
+      count={tasks.length}
+    >
+      {!collapsed && <TaskList tasks={tasks} reorderable={reorderable} label={title} />}
+    </Section>
+  );
+}
+
 export function TodayPage() {
-  const { tasks, settings } = useData();
+  const { tasks, settings, categories, projects } = useData();
   const { today, openQuickAdd } = useUI();
   const all = useMemo(() => tasks.filter((t) => isForToday(t, today)), [tasks, today]);
   const view = useListView(all);
@@ -69,6 +110,8 @@ export function TodayPage() {
     () => (settings.showCompleted ? tasks.filter((t) => completedOn(t, today)) : []),
     [tasks, today, settings.showCompleted],
   );
+  const groupBy = settings.todayGroupBy;
+  const groups = useMemo(() => groupTasks(current, groupBy, { categories, projects }), [current, groupBy, categories, projects]);
 
   return (
     <div className="page">
@@ -78,7 +121,18 @@ export function TodayPage() {
         subtitle={all.length ? `${all.length} ${all.length === 1 ? 'tarea' : 'tareas'} para atender` : undefined}
         actions={<AddButton onClick={() => openQuickAdd({ todayDate: today })} />}
       />
-      <ListToolbar sort={view.sort} onSort={view.setSort} filter={view.filter} onFilter={view.setFilter} allowProjectFilter />
+      <div className="toolbar-row today-tools">
+        <ListToolbar sort={view.sort} onSort={view.setSort} filter={view.filter} onFilter={view.setFilter} allowProjectFilter />
+        <label className="field-inline group-by">
+          <span>Agrupar</span>
+          <select value={groupBy} onChange={(e) => void saveSettings({ todayGroupBy: e.target.value as TodayGroupBy })}>
+            <option value="category">Por categoría</option>
+            <option value="project">Por proyecto</option>
+            <option value="priority">Por prioridad</option>
+            <option value="none">Sin agrupar</option>
+          </select>
+        </label>
+      </div>
 
       {overdue.length > 0 && (
         <Section title="Vencidas" count={overdue.length} tone="danger">
@@ -86,24 +140,25 @@ export function TodayPage() {
         </Section>
       )}
 
-      <Section title="Para hoy" count={current.length}>
-        <TaskList
-          tasks={current}
-          reorderable={view.sort === 'manual'}
-          label="Tareas para hoy"
-          empty={
-            all.length === 0 ? (
-              <EmptyState icon={<Sun size={28} />} title="Nada pendiente para hoy" action={<AddButton onClick={() => openQuickAdd({ todayDate: today })} label="Añadir para hoy" />}>
-                Disfruta el día. Puedes marcar cualquier tarea con “Atender hoy” para traerla aquí.
-              </EmptyState>
-            ) : overdue.length && !current.length ? (
-              <p className="muted small pad">Solo quedan las vencidas de arriba.</p>
-            ) : (
-              <EmptyState title="Sin resultados">Ninguna tarea coincide con los filtros.</EmptyState>
-            )
-          }
-        />
-      </Section>
+      {all.length === 0 ? (
+        <EmptyState icon={<Sun size={28} />} title="Nada pendiente para hoy" action={<AddButton onClick={() => openQuickAdd({ todayDate: today })} label="Añadir para hoy" />}>
+          Disfruta el día. Puedes marcar cualquier tarea con “Atender hoy” para traerla aquí.
+        </EmptyState>
+      ) : !current.length ? (
+        overdue.length ? (
+          <p className="muted small pad">Solo quedan las vencidas de arriba.</p>
+        ) : (
+          <EmptyState title="Sin resultados">Ninguna tarea coincide con los filtros.</EmptyState>
+        )
+      ) : groupBy === 'none' ? (
+        <Section title="Para hoy" count={current.length}>
+          <TaskList tasks={current} reorderable={view.sort === 'manual'} label="Tareas para hoy" />
+        </Section>
+      ) : (
+        groups.map((g) => (
+          <TodayGroup key={g.key} id={`${groupBy}:${g.key}`} title={g.label} color={g.color} tasks={g.tasks} reorderable={view.sort === 'manual'} />
+        ))
+      )}
 
       {doneToday.length > 0 && (
         <Section title="Completadas hoy" count={doneToday.length}>
