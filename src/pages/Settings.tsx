@@ -1,17 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, HardDrive, Pencil, Plus, Share, SquarePlus, Trash2, Upload } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, Download, HardDrive, Pencil, Plus, Share, SquarePlus, Trash2, Upload } from 'lucide-react';
 import { useData } from '../state/data';
 import { useFeedback } from '../state/ui';
 import type { Category, Settings, SortMode } from '../domain/types';
 import { SWATCHES } from '../domain/types';
 import * as repo from '../db/repo';
 import {
-  MAX_BACKUP_BYTES,
   buildBackup,
+  buildZipBackup,
   deliverBackup,
+  deliverFile,
+  zipBackupFileName,
+  parseBackupFile,
   getPreImportSnapshot,
   importBackup,
-  parseBackup,
   restorePreImportSnapshot,
   type ImportResult,
   type ParsedBackup,
@@ -22,14 +24,19 @@ import { errorMessage } from '../hooks/useTaskActions';
 import { Modal, PageHeader, SORT_LABEL } from '../components/ui';
 import { ColorPicker } from './Projects';
 import { Logo } from '../components/Logo';
+import { AppearanceCard } from './SettingsAppearance';
+import { CustomFieldsCard, TrackingCard } from './SettingsTracking';
 
 export function SettingsPage() {
   return (
     <div className="page page-settings">
       <PageHeader eyebrow="Ajustes" title="Configuración" subtitle="Todo se guarda solo en este dispositivo." />
       <PreferencesCard />
+      <AppearanceCard />
       <BackupCard />
       <CategoriesCard />
+      <TrackingCard />
+      <CustomFieldsCard />
       <TagsCard />
       <StorageCard />
       <InstallCard />
@@ -142,20 +149,21 @@ function BackupCard() {
     }
   }, []);
 
-  const doExport = async () => {
+  const doExport = async (full = false) => {
     setBusy(true);
     try {
       const backup = await buildBackup(__APP_VERSION__);
-      const how = await deliverBackup(backup);
+      const how = full ? await deliverFile(await buildZipBackup(__APP_VERSION__), zipBackupFileName()) : await deliverBackup(backup);
       if (how === 'cancelled') {
         toast({ message: 'Exportación cancelada' });
       } else {
         const n = backup.data.tasks.length;
+        const docs = full ? ` y ${backup.data.attachments.length} documento(s)` : '';
         toast({
           message:
             how === 'shared'
-              ? `Respaldo generado (${n} tareas). Elige “Guardar en Archivos” en el menú para conservarlo.`
-              : `Respaldo generado (${n} tareas). Revisa tus descargas para confirmar dónde se guardó.`,
+              ? `Respaldo generado (${n} tareas${docs}). Elige “Guardar en Archivos” en el menú para conservarlo.`
+              : `Respaldo generado (${n} tareas${docs}). Revisa tus descargas para confirmar dónde se guardó.`,
           tone: 'success',
           duration: 7000,
         });
@@ -178,13 +186,8 @@ function BackupCard() {
     setImportError('');
     if (!file) return;
     setFileName(file.name);
-    if (file.size > MAX_BACKUP_BYTES) {
-      setImportError('El archivo es demasiado grande para ser un respaldo de The Daily Edit (máx. 50 MB).');
-      return;
-    }
     try {
-      const text = await file.text();
-      setParsed(parseBackup(text));
+      setParsed(await parseBackupFile(file));
     } catch (e) {
       setImportError(errorMessage(e));
     } finally {
@@ -215,9 +218,16 @@ function BackupCard() {
         Tus datos viven solo en este iPad. Exporta un respaldo con regularidad y guárdalo en Archivos o iCloud Drive.
         {lastExport && <> Último respaldo generado: {formatTimestamp(lastExport)}.</>}
       </p>
+      <p className="muted small">
+        <strong>Exportar mis datos</strong> crea un JSON con toda la información y configuración, pero sin el contenido de los documentos
+        adjuntos. <strong>Respaldo completo</strong> crea un ZIP que también incluye los documentos.
+      </p>
       <div className="row-wrap">
         <button type="button" className="btn btn-primary" onClick={() => void doExport()} disabled={busy}>
           <Download size={17} aria-hidden="true" /> Exportar mis datos
+        </button>
+        <button type="button" className="btn btn-quiet" onClick={() => void doExport(true)} disabled={busy}>
+          <Archive size={17} aria-hidden="true" /> Respaldo completo (.zip)
         </button>
         <button type="button" className="btn btn-quiet" onClick={() => fileRef.current?.click()}>
           <Upload size={17} aria-hidden="true" /> Importar respaldo
@@ -225,7 +235,7 @@ function BackupCard() {
         <input
           ref={fileRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.zip,application/json,application/zip"
           className="sr-only"
           tabIndex={-1}
           aria-hidden="true"
@@ -255,9 +265,10 @@ function BackupCard() {
           refreshSnapshot();
           toast({
             message:
-              r.mode === 'replace'
-                ? `Importación completada: se cargaron ${r.added} registros.`
-                : `Importación completada: ${r.added} nuevos, ${r.updated} actualizados, ${r.unchanged} sin cambios.`,
+              (r.mode === 'replace'
+                ? `Importación completada: se cargaron ${r.added} registros`
+                : `Importación completada: ${r.added} nuevos, ${r.updated} actualizados, ${r.unchanged} sin cambios`) +
+              (r.files ? ` y ${r.files} documento(s).` : '.'),
             tone: 'success',
             duration: 8000,
           });
@@ -339,8 +350,12 @@ function ImportDialog({
             <dd>{d.tags.length}</dd>
           </div>
           <div>
-            <dt>Recurrentes</dt>
-            <dd>{d.tasks.filter((t) => t.recurrence).length}</dd>
+            <dt>Documentos</dt>
+            <dd>{d.attachments.length}</dd>
+          </div>
+          <div>
+            <dt>Campos personalizados</dt>
+            <dd>{d.customFields.length}</dd>
           </div>
         </dl>
         {parsed.warnings.length > 0 && (
@@ -804,7 +819,7 @@ function AboutCard() {
         <div>
           <p className="serif-name">The Daily Edit</p>
           <p className="muted small">A little space for everything that matters.</p>
-          <p className="muted small">Versión {__APP_VERSION__} · esquema de datos v1</p>
+          <p className="muted small">Versión {__APP_VERSION__} · esquema de datos v2</p>
         </div>
       </div>
       <p className="muted small">

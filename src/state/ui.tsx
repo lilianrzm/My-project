@@ -15,6 +15,7 @@ export type RouteName =
   | 'project'
   | 'calendar'
   | 'completed'
+  | 'analysis'
   | 'review'
   | 'search'
   | 'settings';
@@ -24,7 +25,7 @@ export interface Route {
   id?: string;
 }
 
-const ROUTES: RouteName[] = ['dashboard', 'inbox', 'today', 'upcoming', 'projects', 'project', 'calendar', 'completed', 'review', 'search', 'settings'];
+const ROUTES: RouteName[] = ['dashboard', 'inbox', 'today', 'upcoming', 'projects', 'project', 'calendar', 'completed', 'analysis', 'review', 'search', 'settings'];
 
 export function parseHash(hash: string): Route {
   const [, name, id] = hash.replace(/^#/, '').split('/');
@@ -50,6 +51,11 @@ interface UIState {
   openQuickAdd: (defaults?: Partial<TaskDraft>) => void;
   closeQuickAdd: () => void;
   today: string;
+  detailExpanded: boolean;
+  setDetailExpanded: (v: boolean) => void;
+  /** Actividad cuyo registro de cierre está abierto. */
+  closureTaskId: string | null;
+  openClosure: (id: string | null) => void;
 }
 
 const UIContext = createContext<UIState | null>(null);
@@ -76,6 +82,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [quickAdd, setQuickAdd] = useState<{ open: boolean; defaults: Partial<TaskDraft> }>({ open: false, defaults: {} });
   const today = useLiveToday();
+  const [detailExpanded, setDetailExpanded] = useState(false);
+  const [closureTaskId, openClosure] = useState<string | null>(null);
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash(window.location.hash));
@@ -93,8 +101,21 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const closeQuickAdd = useCallback(() => setQuickAdd((q) => ({ ...q, open: false })), []);
 
   const value = useMemo<UIState>(
-    () => ({ route, navigate, selectedTaskId, selectTask: setSelectedTaskId, quickAdd, openQuickAdd, closeQuickAdd, today }),
-    [route, navigate, selectedTaskId, quickAdd, openQuickAdd, closeQuickAdd, today],
+    () => ({
+      route,
+      navigate,
+      selectedTaskId,
+      selectTask: setSelectedTaskId,
+      quickAdd,
+      openQuickAdd,
+      closeQuickAdd,
+      today,
+      detailExpanded,
+      setDetailExpanded,
+      closureTaskId,
+      openClosure,
+    }),
+    [route, navigate, selectedTaskId, quickAdd, openQuickAdd, closeQuickAdd, today, detailExpanded, closureTaskId],
   );
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;
 }

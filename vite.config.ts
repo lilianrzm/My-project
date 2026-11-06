@@ -41,7 +41,9 @@ export default defineConfig({
       },
       workbox: {
         // Solo recursos de la app. Los datos personales viven en IndexedDB, nunca en Cache Storage.
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,woff2,webmanifest}'],
+        // El lector de PDF (~1.3 MB) se precachea para poder leer documentos sin conexión
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         clientsClaim: false,

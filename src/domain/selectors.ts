@@ -1,5 +1,6 @@
 import { addDays, diffDays, startOfWeek } from './dates';
-import type { ISODate, Priority, SortMode, Task } from './types';
+import type { Category, ISODate, Priority, Project, SortMode, Task, TodayGroupBy } from './types';
+import { PRIORITY_LABEL } from './types';
 
 export const isOpen = (t: Task) => t.status === 'open';
 
@@ -130,7 +131,8 @@ export function projectProgress(tasks: Task[], projectId: string): { done: numbe
   let done = 0;
   let total = 0;
   for (const t of tasks) {
-    if (t.projectId !== projectId) continue;
+    // Las canceladas no cuentan para el avance
+    if (t.projectId !== projectId || t.status === 'cancelled') continue;
     total++;
     if (t.status === 'completed') done++;
   }
@@ -151,4 +153,45 @@ export function localDateOf(ts: string): ISODate {
 
 export function daysUntil(due: ISODate, today: ISODate): number {
   return diffDays(due, today);
+}
+
+export interface TaskGroup {
+  key: string;
+  label: string;
+  color?: string;
+  tasks: Task[];
+}
+
+/** Agrupa una lista ya ordenada conservando su orden interno. Los sin categoría/proyecto van al final. */
+export function groupTasks(tasks: Task[], by: TodayGroupBy, ctx: { categories: Category[]; projects: Project[] }): TaskGroup[] {
+  if (by === 'none') return [{ key: 'all', label: 'Para hoy', tasks }];
+  const map = new Map<string, Task[]>();
+  const keyOf = (t: Task) => (by === 'category' ? t.categoryId ?? '__none' : by === 'project' ? t.projectId ?? '__none' : String(t.priority));
+  for (const t of tasks) {
+    const k = keyOf(t);
+    const arr = map.get(k) ?? [];
+    arr.push(t);
+    map.set(k, arr);
+  }
+  const out: TaskGroup[] = [];
+  if (by === 'priority') {
+    for (const p of [3, 2, 1, 0] as Priority[]) {
+      const list = map.get(String(p));
+      if (list?.length) out.push({ key: String(p), label: p === 0 ? 'Sin prioridad' : `Prioridad ${PRIORITY_LABEL[p].toLowerCase()}`, tasks: list });
+    }
+    return out;
+  }
+  const items: { id: string; name: string; color: string }[] = by === 'category' ? ctx.categories : ctx.projects;
+  for (const it of items) {
+    const list = map.get(it.id);
+    if (list?.length) out.push({ key: it.id, label: it.name, color: it.color, tasks: list });
+    map.delete(it.id);
+  }
+  const none = map.get('__none');
+  map.delete('__none');
+  // Referencias a categorías/proyectos eliminados
+  const orphan = [...map.values()].flat();
+  const rest = [...(none ?? []), ...orphan];
+  if (rest.length) out.push({ key: '__none', label: by === 'category' ? 'Sin categoría' : 'Sin proyecto', tasks: rest });
+  return out;
 }

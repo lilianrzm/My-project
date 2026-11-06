@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { Category, Project, Settings, Tag, Task } from '../domain/types';
+import type { Category, CustomField, Project, Settings, Tag, Task } from '../domain/types';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { normalizeSettings } from '../domain/validate';
 
@@ -12,6 +12,8 @@ export interface DataState {
   categories: Category[];
   tags: Tag[];
   settings: Settings;
+  /** Campos personalizados (incluye archivados), en orden de visualización. */
+  customFields: CustomField[];
   projectById: Map<string, Project>;
   categoryById: Map<string, Category>;
   tagById: Map<string, Tag>;
@@ -30,6 +32,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const categories = useLiveQuery(() => db.categories.orderBy('order').toArray(), []);
   const tags = useLiveQuery(() => db.tags.toArray(), []);
   const settingsRow = useLiveQuery(() => db.settings.get('settings'), []);
+  const customFields = useLiveQuery(() => db.customFields.orderBy('order').toArray(), []);
 
   const projectById = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p])), [projects]);
   const categoryById = useMemo(() => new Map((categories ?? []).map((c) => [c.id, c])), [categories]);
@@ -52,12 +55,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       categories: categories ?? [],
       tags: sortedTags,
       settings,
+      customFields: customFields ?? [],
       projectById,
       categoryById,
       tagById,
       tagNames,
     }),
-    [tasks, projects, categories, sortedTags, tags, settings, projectById, categoryById, tagById, tagNames],
+    [tasks, projects, categories, sortedTags, tags, settings, customFields, projectById, categoryById, tagById, tagNames],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

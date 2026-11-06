@@ -33,6 +33,7 @@ export function useShortcuts() {
           c: { name: 'calendar' },
           d: { name: 'dashboard' },
           u: { name: 'upcoming' },
+          a: { name: 'analysis' },
         };
         if (map[k]) {
           e.preventDefault();

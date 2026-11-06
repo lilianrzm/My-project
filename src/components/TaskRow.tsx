@@ -67,6 +67,7 @@ export interface TaskRowProps {
 function TaskRowInner(p: TaskRowProps) {
   const { task, today } = p;
   const done = task.status === 'completed';
+  const cancelled = task.status === 'cancelled';
   const overdue = !done && !!task.dueDate && task.dueDate < today;
   const subDone = task.subtasks.filter((s) => s.done).length;
   const hasNotes = !!(task.notes.trim() || task.description.trim());
@@ -80,7 +81,7 @@ function TaskRowInner(p: TaskRowProps) {
 
   return (
     <div
-      className={`task-row${done ? ' is-done' : ''}${p.selected ? ' is-selected' : ''}${p.isDragging ? ' is-dragging' : ''}`}
+      className={`task-row${done || cancelled ? ' is-done' : ''}${cancelled ? ' is-cancelled' : ''}${p.selected ? ' is-selected' : ''}${p.isDragging ? ' is-dragging' : ''}`}
       style={p.dragStyle}
       data-task-id={task.id}
       onClick={() => p.onOpen(task.id)}
@@ -98,7 +99,7 @@ function TaskRowInner(p: TaskRowProps) {
       )}
       <CheckButton
         checked={done}
-        label={done ? `Reabrir: ${task.title}` : `Completar: ${task.title}`}
+        label={done ? `Reabrir: ${task.title}` : cancelled ? `Reactivar: ${task.title}` : `Completar: ${task.title}`}
         onToggle={() => p.onToggle(task)}
       />
       <button
@@ -117,6 +118,7 @@ function TaskRowInner(p: TaskRowProps) {
           <PriorityMark priority={task.priority} />
         </div>
         <div className="task-meta">
+          {cancelled && <span className="meta-chip is-cancelled">Cancelada</span>}
           {p.showDate !== false && task.dueDate && (
             <span className={`meta-chip${overdue ? ' is-overdue' : task.dueDate === today ? ' is-today' : ''}`}>
               <CalendarDays size={13} aria-hidden="true" />

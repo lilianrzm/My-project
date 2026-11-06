@@ -1,7 +1,16 @@
 import { isValidISODate, isValidTime } from './dates';
 import type {
   Activity,
+  Appearance,
+  Attachment,
   Category,
+  Closure,
+  CustomField,
+  CustomFieldType,
+  CustomValue,
+  FieldChange,
+  FieldScope,
+  Option,
   Priority,
   Project,
   ProjectStatus,
@@ -12,7 +21,7 @@ import type {
   Tag,
   Task,
 } from './types';
-import { DEFAULT_SETTINGS } from './types';
+import { DEFAULT_APPEARANCE, DEFAULT_ATTENTION_TYPES, DEFAULT_CLOSURE_RESULTS, DEFAULT_SETTINGS } from './types';
 
 export function newId(): string {
   const c = globalThis.crypto;
@@ -84,7 +93,8 @@ function normalizeSubtasks(v: unknown): Subtask[] {
     let id = isId(s.id) ? s.id : newId();
     if (seen.has(id)) id = newId();
     seen.add(id);
-    out.push({ id, title, done: s.done === true });
+    const done = s.done === true;
+    out.push({ id, title, done, createdAt: tsOrNull(s.createdAt), completedAt: done ? tsOrNull(s.completedAt) : null });
   }
   return out;
 }
@@ -96,7 +106,7 @@ export function normalizeTask(v: unknown, now = new Date().toISOString()): Task 
   const title = str(v.title, LIMITS.title).trim();
   if (!title) throw new ValidationError(`La tarea ${v.id} no tiene título.`);
   const dueDate = isValidISODate(v.dueDate) ? v.dueDate : null;
-  const status = v.status === 'completed' ? 'completed' : 'open';
+  const status = v.status === 'completed' ? 'completed' : v.status === 'cancelled' ? 'cancelled' : 'open';
   const createdAt = ts(v.createdAt, now);
   return {
     id: v.id,
@@ -114,6 +124,12 @@ export function normalizeTask(v: unknown, now = new Date().toISOString()): Task 
     subtasks: normalizeSubtasks(v.subtasks),
     status,
     completedAt: status === 'completed' ? tsOrNull(v.completedAt) ?? ts(v.updatedAt, now) : null,
+    cancelledAt: status === 'cancelled' ? tsOrNull(v.cancelledAt) ?? ts(v.updatedAt, now) : null,
+    startDate: isValidISODate(v.startDate) ? v.startDate : null,
+    responsible: str(v.responsible, LIMITS.name).trim(),
+    folio: str(v.folio, LIMITS.name).trim(),
+    closure: normalizeClosure(v.closure),
+    customValues: normalizeCustomValues(v.customValues),
     todayDate: isValidISODate(v.todayDate) ? v.todayDate : null,
     recurrence: normalizeRecurrence(v.recurrence, dueDate),
     seriesId: idOrNull(v.seriesId),
@@ -166,7 +182,7 @@ export function normalizeTag(v: unknown, now = new Date().toISOString()): Tag {
 
 export function normalizeActivity(v: unknown): Activity | null {
   if (!isObj(v) || !isId(v.id) || !isId(v.taskId)) return null;
-  const types = ['created', 'completed', 'reopened', 'deleted', 'updated'];
+  const types = ['created', 'completed', 'reopened', 'deleted', 'updated', 'cancelled', 'status', 'responsible', 'dueDate', 'closure'];
   if (!types.includes(v.type as string)) return null;
   const at = tsOrNull(v.at);
   if (!at) return null;
@@ -177,6 +193,114 @@ export function normalizeActivity(v: unknown): Activity | null {
     type: v.type as Activity['type'],
     at,
     title: str(v.title, LIMITS.title),
+    ...(Array.isArray(v.changes) ? { changes: normalizeChanges(v.changes) } : {}),
+  };
+}
+
+function normalizeChanges(arr: unknown[]): FieldChange[] {
+  const cell = (x: unknown) => (x === null || x === undefined ? null : String(x).slice(0, 500));
+  return arr
+    .filter(isObj)
+    .slice(0, 50)
+    .map((c) => ({ field: str(c.field, 60), from: cell(c.from), to: cell(c.to) }));
+}
+
+export function normalizeClosure(v: unknown): Closure | null {
+  if (!isObj(v)) return null;
+  const now = new Date().toISOString();
+  const recordedAt = ts(v.recordedAt, now);
+  return {
+    resultId: idOrNull(v.resultId),
+    attentionTypeId: idOrNull(v.attentionTypeId),
+    effectiveDate: isValidISODate(v.effectiveDate) ? v.effectiveDate : null,
+    responsible: str(v.responsible, LIMITS.name).trim(),
+    observations: str(v.observations, LIMITS.notes),
+    folio: str(v.folio, LIMITS.name).trim(),
+    evidenceIds: Array.isArray(v.evidenceIds) ? [...new Set(v.evidenceIds.filter(isId))].slice(0, 100) : [],
+    recordedAt,
+    updatedAt: ts(v.updatedAt, recordedAt),
+  };
+}
+
+export function normalizeCustomValues(v: unknown): Record<string, CustomValue> {
+  if (!isObj(v)) return {};
+  const out: Record<string, CustomValue> = {};
+  for (const [k, val] of Object.entries(v).slice(0, 200)) {
+    if (!isId(k)) continue;
+    if (typeof val === 'string') out[k] = val.slice(0, LIMITS.notes);
+    else if (typeof val === 'number' && Number.isFinite(val)) out[k] = val;
+    else if (typeof val === 'boolean') out[k] = val;
+    else if (Array.isArray(val)) out[k] = val.filter(isId).slice(0, 100);
+  }
+  return out;
+}
+
+export function normalizeOptions(v: unknown, fallback: Option[] = []): Option[] {
+  if (!Array.isArray(v)) return fallback;
+  const seen = new Set<string>();
+  const out: Option[] = [];
+  for (const o of v.slice(0, 200)) {
+    if (!isObj(o) || !isId(o.id) || seen.has(o.id)) continue;
+    const label = str(o.label, LIMITS.name).trim();
+    if (!label) continue;
+    seen.add(o.id);
+    out.push(o.archived === true ? { id: o.id, label, archived: true } : { id: o.id, label });
+  }
+  return out;
+}
+
+const FIELD_TYPES: CustomFieldType[] = ['text', 'longtext', 'number', 'date', 'select', 'multiselect', 'checkbox', 'currency'];
+
+function normalizeScope(v: unknown): FieldScope {
+  if (isObj(v) && (v.kind === 'category' || v.kind === 'project') && isId(v.id)) return { kind: v.kind, id: v.id };
+  return { kind: 'all' };
+}
+
+export function normalizeCustomField(v: unknown, now = new Date().toISOString()): CustomField {
+  if (!isObj(v) || !isId(v.id)) throw new ValidationError('Un campo personalizado no tiene identificador.');
+  const name = str(v.name, LIMITS.name).trim();
+  if (!name) throw new ValidationError(`El campo ${v.id} no tiene nombre.`);
+  if (!FIELD_TYPES.includes(v.type as CustomFieldType)) throw new ValidationError(`El campo "${name}" tiene un tipo desconocido.`);
+  const createdAt = ts(v.createdAt, now);
+  return {
+    id: v.id,
+    name,
+    type: v.type as CustomFieldType,
+    description: str(v.description, LIMITS.description),
+    options: normalizeOptions(v.options),
+    scope: normalizeScope(v.scope),
+    archived: v.archived === true,
+    order: num(v.order, 0),
+    currency: /^[A-Z]{3}$/.test(String(v.currency)) ? String(v.currency) : 'MXN',
+    createdAt,
+    updatedAt: ts(v.updatedAt, createdAt),
+  };
+}
+
+const EXTRACT: Attachment['extractStatus'][] = ['pending', 'ok', 'no-text', 'needs-ocr', 'unsupported', 'error'];
+
+export function normalizeAttachment(v: unknown, now = new Date().toISOString()): Attachment {
+  if (!isObj(v) || !isId(v.id) || !isId(v.taskId)) throw new ValidationError('Un documento adjunto no es válido.');
+  const name = str(v.name, 255).trim() || 'documento';
+  return {
+    id: v.id,
+    taskId: v.taskId,
+    name,
+    mime: str(v.mime, 120) || 'application/octet-stream',
+    size: Math.max(0, Math.floor(num(v.size, 0))),
+    addedAt: ts(v.addedAt, now),
+    description: str(v.description, LIMITS.description),
+    descriptionSource: v.descriptionSource === 'auto' || v.descriptionSource === 'manual' ? v.descriptionSource : 'none',
+    extractStatus: EXTRACT.includes(v.extractStatus as Attachment['extractStatus']) ? (v.extractStatus as Attachment['extractStatus']) : 'unsupported',
+  };
+}
+
+function normalizeAppearance(v: unknown): Appearance {
+  const a = isObj(v) ? v : {};
+  return {
+    font: a.font === 'editorial' || a.font === 'clean' ? a.font : DEFAULT_APPEARANCE.font,
+    palette: a.palette === 'rose' || a.palette === 'sage' || a.palette === 'blue' ? a.palette : DEFAULT_APPEARANCE.palette,
+    radius: a.radius === 'round' ? 'round' : 'soft',
   };
 }
 
@@ -191,5 +315,16 @@ export function normalizeSettings(v: unknown): Settings {
     defaultSort: SORTS.includes(s.defaultSort as SortMode) ? (s.defaultSort as SortMode) : DEFAULT_SETTINGS.defaultSort,
     showCompleted: s.showCompleted === true,
     density: s.density === 'compact' ? 'compact' : 'comfortable',
+    appearance: normalizeAppearance(s.appearance),
+    todayGroupBy:
+      s.todayGroupBy === 'none' || s.todayGroupBy === 'project' || s.todayGroupBy === 'priority' ? s.todayGroupBy : 'category',
+    closurePrompt: s.closurePrompt !== false,
+    closureResults: normalizeOptions(s.closureResults, DEFAULT_CLOSURE_RESULTS),
+    attentionTypes: normalizeOptions(s.attentionTypes, DEFAULT_ATTENTION_TYPES),
+    analytics: {
+      order: Array.isArray((s.analytics as Obj | undefined)?.order) ? ((s.analytics as Obj).order as unknown[]).filter(isId).slice(0, 50) : [],
+      hidden: Array.isArray((s.analytics as Obj | undefined)?.hidden) ? ((s.analytics as Obj).hidden as unknown[]).filter(isId).slice(0, 50) : [],
+      columns: Array.isArray((s.analytics as Obj | undefined)?.columns) ? ((s.analytics as Obj).columns as unknown[]).filter(isId).slice(0, 200) : [],
+    },
   };
 }

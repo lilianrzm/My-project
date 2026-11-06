@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { useData } from './state/data';
 import { useUI } from './state/ui';
@@ -7,6 +7,7 @@ import { BottomNav, Sidebar } from './components/Navigation';
 import { TaskDetailPanel } from './components/TaskDetail';
 import { QuickAdd } from './components/QuickAdd';
 import { ConfirmDialog, Toasts } from './components/ui';
+import { ClosureDialog } from './components/Closure';
 import { PwaStatus } from './pwa/PwaStatus';
 import { Dashboard } from './pages/Dashboard';
 import { InboxPage, TodayPage, UpcomingPage } from './pages/Lists';
@@ -15,6 +16,10 @@ import { CalendarPage } from './pages/Calendar';
 import { CompletedPage, SearchPage } from './pages/Completed';
 import { ReviewPage } from './pages/Review';
 import { SettingsPage } from './pages/Settings';
+
+// Análisis (gráficas, tabla y Excel) se carga solo al abrirla: el arranque sigue siendo ligero.
+const AnalysisPage = lazy(() => import('./pages/Analysis').then((m) => ({ default: m.AnalysisPage })));
+import { applyAppearance, isPreviewing } from './theme';
 
 function Page() {
   const { route } = useUI();
@@ -33,6 +38,12 @@ function Page() {
       return <CalendarPage />;
     case 'completed':
       return <CompletedPage />;
+    case 'analysis':
+      return (
+        <Suspense fallback={<div className="loading" aria-busy="true" aria-label="Cargando análisis" />}>
+          <AnalysisPage />
+        </Suspense>
+      );
     case 'review':
       return <ReviewPage />;
     case 'search':
@@ -53,6 +64,7 @@ const TITLES: Record<string, string> = {
   project: 'Proyecto',
   calendar: 'Calendario',
   completed: 'Completadas',
+  analysis: 'Análisis',
   review: 'Revisión semanal',
   search: 'Buscar',
   settings: 'Configuración',
@@ -60,10 +72,15 @@ const TITLES: Record<string, string> = {
 
 export function App() {
   const { ready, settings } = useData();
-  const { route, openQuickAdd, selectedTaskId, today } = useUI();
+  const { route, openQuickAdd, selectedTaskId, today, detailExpanded } = useUI();
   const mainRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
   useShortcuts();
+
+  // Aplica la apariencia guardada (y la refleja para el arranque sin destellos)
+  useEffect(() => {
+    if (!isPreviewing()) applyAppearance(settings.appearance, true);
+  }, [settings.appearance]);
 
   // Al cambiar de sección: volver arriba, actualizar el título y mover el foco al encabezado (lectores de pantalla)
   useEffect(() => {
@@ -83,7 +100,7 @@ export function App() {
   };
 
   return (
-    <div className={`app${selectedTaskId ? ' has-detail' : ''}`} data-density={settings.density}>
+    <div className={`app${selectedTaskId ? ' has-detail' : ''}${selectedTaskId && detailExpanded ? ' has-detail-expanded' : ''}`} data-density={settings.density}>
       <a className="skip-link" href="#main">
         Saltar al contenido
       </a>
@@ -98,6 +115,7 @@ export function App() {
         <Plus size={26} aria-hidden="true" />
       </button>
       <QuickAdd />
+      <ClosureDialog />
       <ConfirmDialog />
       <Toasts />
     </div>

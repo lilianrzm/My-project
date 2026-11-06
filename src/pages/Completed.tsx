@@ -18,7 +18,15 @@ export function CompletedPage() {
   const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER);
   const [limit, setLimit] = useState(100);
 
-  const completed = useMemo(() => tasks.filter((t) => t.status === 'completed'), [tasks]);
+  const [showCancelled, setShowCancelled] = useState(false);
+  const cancelledCount = useMemo(() => tasks.filter((t) => t.status === 'cancelled').length, [tasks]);
+  const completed = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.status === 'completed' || (showCancelled && t.status === 'cancelled'))
+        .map((t) => (t.status === 'cancelled' ? { ...t, completedAt: t.cancelledAt } : t)),
+    [tasks, showCancelled],
+  );
   const visible = useMemo(() => {
     let list = applyFilter(completed, filter);
     if (query.trim()) list = searchTasks(list, query, tagNames);
@@ -65,7 +73,16 @@ export function CompletedPage() {
           </button>
         )}
       </div>
-      <ListToolbar sort={'created' as SortMode} onSort={() => undefined} filter={filter} onFilter={setFilter} allowProjectFilter allowManual={false} hideSort />
+      <div className="toolbar-row">
+        <ListToolbar sort={'created' as SortMode} onSort={() => undefined} filter={filter} onFilter={setFilter} allowProjectFilter allowManual={false} hideSort />
+        {cancelledCount > 0 && (
+          <label className="switch">
+            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
+            <span className="switch-track" aria-hidden="true" />
+            Incluir canceladas ({cancelledCount})
+          </label>
+        )}
+      </div>
 
       {completed.length === 0 ? (
         <EmptyState icon={<CheckCircle2 size={28} />} title="Todavía no hay tareas completadas">

@@ -3,6 +3,7 @@ import * as repo from '../db/repo';
 import { addDays, formatRelative, startOfWeek } from '../domain/dates';
 import type { Priority, Task } from '../domain/types';
 import { useFeedback, useUI } from '../state/ui';
+import { useData } from '../state/data';
 
 export function errorMessage(e: unknown): string {
   if (e instanceof Error && e.message) {
@@ -17,7 +18,9 @@ export function errorMessage(e: unknown): string {
 /** Acciones sobre tareas con avisos y "deshacer". Las funciones son estables. */
 export function useTaskActions() {
   const { toast } = useFeedback();
-  const { today, selectTask } = useUI();
+  const { today, selectTask, openClosure } = useUI();
+  const { settings } = useData();
+  const closurePrompt = settings.closurePrompt;
 
   return useMemo(() => {
     const safe = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -39,6 +42,7 @@ export function useTaskActions() {
               message: next?.dueDate ? `Completada · se repite ${formatRelative(next.dueDate, today).toLowerCase()}` : 'Tarea completada',
               action: { label: 'Deshacer', run: () => void safe(() => repo.reopenTask(task.id)) },
             });
+            if (closurePrompt) openClosure(task.id);
           }
         }),
       update: (id: string, patch: Partial<Task>) => safe(() => repo.updateTask(id, patch)),
@@ -47,7 +51,7 @@ export function useTaskActions() {
           const removed = await repo.deleteTasks(tasks.map((t) => t.id));
           selectTask(null);
           toast({
-            message: removed.length === 1 ? 'Tarea eliminada' : `${removed.length} tareas eliminadas`,
+            message: removed.tasks.length === 1 ? 'Tarea eliminada' : `${removed.tasks.length} tareas eliminadas`,
             action: { label: 'Deshacer', run: () => void safe(() => repo.restoreTasks(removed)) },
             duration: 7000,
           });
@@ -75,13 +79,18 @@ export function useTaskActions() {
             action: { label: 'Deshacer', run: () => void safe(() => repo.updateTask(task.id, prev)) },
           });
         }),
+      cancel: (task: Task) =>
+        safe(async () => {
+          await repo.cancelTask(task.id);
+          toast({ message: 'Actividad cancelada', action: { label: 'Deshacer', run: () => void safe(() => repo.reopenTask(task.id)) } });
+        }),
       setPriority: (task: Task, priority: Priority) => safe(() => repo.updateTask(task.id, { priority })),
       toggleToday: (task: Task) =>
         safe(() => repo.updateTask(task.id, { todayDate: task.todayDate ? null : today })),
       reorder: (ids: string[]) => safe(() => repo.reorderTasks(ids)),
       create: (draft: repo.TaskDraft) => safe(() => repo.createTask(draft)),
     };
-  }, [toast, today, selectTask]);
+  }, [toast, today, selectTask, openClosure, closurePrompt]);
 }
 
 export type TaskActions = ReturnType<typeof useTaskActions>;
