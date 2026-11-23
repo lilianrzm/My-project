@@ -138,9 +138,9 @@ export function weekdayHeaders(weekStart: 0 | 1): string[] {
   return Array.from({ length: 7 }, (_, i) => capitalize(formatWeekdayShort(addDays(base, i + weekStart))));
 }
 
-export function greeting(now: Date = new Date()): string {
+export function greeting(now: Date = new Date()): { text: string; emoji: string } {
   const h = now.getHours();
-  if (h >= 5 && h < 12) return 'Good morning';
-  if (h >= 12 && h < 19) return 'Good afternoon';
-  return 'Good evening';
+  if (h >= 5 && h < 12) return { text: 'Buenos días', emoji: '☀️' };
+  if (h >= 12 && h < 19) return { text: 'Buenas tardes', emoji: '🌤️' };
+  return { text: 'Buenas noches', emoji: '🌙' };
 }

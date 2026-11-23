@@ -126,7 +126,7 @@ export function TodayPage() {
         <label className="field-inline group-by">
           <span>Agrupar</span>
           <select value={groupBy} onChange={(e) => void saveSettings({ todayGroupBy: e.target.value as TodayGroupBy })}>
-            <option value="category">Por categoría</option>
+            <option value="category">Por área</option>
             <option value="project">Por proyecto</option>
             <option value="priority">Por prioridad</option>
             <option value="none">Sin agrupar</option>

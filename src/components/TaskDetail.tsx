@@ -2,8 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Ban, CalendarClock, CalendarPlus, ChevronDown, Copy, Maximize2, Minimize2, MoreHorizontal, RotateCcw, Sun, Trash2, X } from 'lucide-react';
 import type { Priority, Recurrence, Subtask, Task } from '../domain/types';
-import { PRIORITY_LABEL, STATUS_LABEL } from '../domain/types';
-import { formatTimestamp } from '../domain/dates';
+import { PRIORITY_LABEL } from '../domain/types';
 import * as repo from '../db/repo';
 import { db } from '../db/db';
 import { useData } from '../state/data';
@@ -14,8 +13,6 @@ import { Menu } from './ui';
 import { RecurrenceEditor } from './RecurrenceEditor';
 import { SubtaskList } from './SubtaskList';
 import { Attachments } from './Attachments';
-import { CustomFieldsEditor, applicableFields } from './CustomFieldsEditor';
-import { ClosureSummary, HistoryList } from './Closure';
 
 /** Panel de detalles: lateral (consulta rápida) o expandido (más espacio para leer y editar). */
 export function TaskDetailPanel() {
@@ -89,7 +86,7 @@ function Panel({ id, title, badge, defaultOpen = true, children }: { id: string;
 }
 
 function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; expanded: boolean; onToggleExpand: () => void; onClose: () => void }) {
-  const { projects, categories, tags, tagById, settings, customFields } = useData();
+  const { projects, categories, tags, tagById, settings, goals } = useData();
   const { today } = useUI();
   const { toast, confirm } = useFeedback();
   const actions = useTaskActions();
@@ -99,10 +96,6 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [notes, setNotes] = useState(task.notes);
-  const [responsible, setResponsible] = useState(task.responsible);
-  const [folio, setFolio] = useState(task.folio);
-  useEffect(() => setResponsible(task.responsible), [task.responsible]);
-  useEffect(() => setFolio(task.folio), [task.folio]);
   const pending = useRef<Partial<Task>>({});
   const timer = useRef<number | undefined>(undefined);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -224,7 +217,6 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
     await actions.remove([task]);
   };
 
-  const fieldsHere = applicableFields(customFields, task);
 
   const header = (
     <div className="detail-top">
@@ -252,7 +244,7 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
         ) : (
           <button
             type="button"
-            className={`btn btn-sm ${done ? 'btn-quiet' : 'btn-primary'}${!done && pendingSubs ? ' is-blocked' : ''}`}
+            className={`btn btn-sm ${done ? 'btn-quiet' : 'btn-primary'}`}
             aria-describedby={!done && pendingSubs ? `${id}-blocked` : undefined}
             onClick={() => void flush().then(() => actions.toggle(task))}
           >
@@ -274,8 +266,8 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
             { label: 'Posponer un día', icon: <CalendarPlus size={16} />, onSelect: () => void actions.postpone(task, 'plus1', settings.weekStart), disabled: task.status !== 'open' },
             { label: 'Posponer a la próxima semana', icon: <CalendarClock size={16} />, onSelect: () => void actions.postpone(task, 'nextWeek', settings.weekStart), disabled: task.status !== 'open' },
             'sep',
-            { label: 'Cancelar actividad', icon: <Ban size={16} />, onSelect: () => void actions.cancel(task), disabled: cancelled },
-            { label: 'Eliminar actividad', icon: <Trash2 size={16} />, danger: true, onSelect: () => void remove() },
+            { label: 'Cancelar tarea', icon: <Ban size={16} />, onSelect: () => void actions.cancel(task), disabled: cancelled },
+            { label: 'Eliminar tarea', icon: <Trash2 size={16} />, danger: true, onSelect: () => void remove() },
           ]}
         />
       </div>
@@ -285,7 +277,7 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
   const titleBlock = (
     <>
       <div className="detail-title-row">
-        <CheckButton checked={done} label={done ? 'Reabrir actividad' : 'Completar actividad'} onToggle={() => void flush().then(() => actions.toggle(task))} />
+        <CheckButton checked={done} label={done ? 'Reabrir tarea' : 'Completar tarea'} onToggle={(o) => void flush().then(() => actions.toggle(task, o))} />
         <label htmlFor={`${id}-title`} className="sr-only">
           Título
         </label>
@@ -314,14 +306,12 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
         />
       </div>
       {!title.trim() && <p className="field-error">El título no puede quedar vacío.</p>}
-      <div className="detail-status">
-        <span className={`status-pill status-${task.status}`}>{STATUS_LABEL[task.status]}</span>
-        {!done && !cancelled && pendingSubs > 0 && (
-          <span id={`${id}-blocked`} className="small muted">
-            {pendingSubs === 1 ? '1 subtarea pendiente para poder completarla' : `${pendingSubs} subtareas pendientes para poder completarla`}
-          </span>
-        )}
-      </div>
+      {!done && !cancelled && pendingSubs > 0 && (
+        <p id={`${id}-blocked`} className="detail-hint-line small muted">
+          {pendingSubs === 1 ? 'Te queda 1 subtarea' : `Te quedan ${pendingSubs} subtareas`}
+        </p>
+      )}
+      {cancelled && <p className="detail-hint-line small text-danger">Tarea cancelada</p>}
       <label htmlFor={`${id}-desc`} className="sr-only">
         Descripción
       </label>
@@ -345,19 +335,6 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
       <button type="button" className={`toggle-chip${task.todayDate ? ' is-on' : ''}`} aria-pressed={!!task.todayDate} onClick={() => void actions.toggleToday(task)}>
         <Sun size={15} aria-hidden="true" /> {task.todayDate ? 'Marcada para hoy' : 'Atender hoy'}
       </button>
-      <div className="field-row">
-        <label className="field-label" htmlFor={`${id}-start`}>
-          Inicio
-        </label>
-        <div className="inline-gap">
-          <input id={`${id}-start`} type="date" value={task.startDate ?? ''} onChange={(e) => save({ startDate: e.target.value || null })} />
-          {task.startDate && (
-            <button type="button" className="icon-btn icon-btn-sm" aria-label="Quitar fecha de inicio" onClick={() => save({ startDate: null })}>
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      </div>
       <div className="field-row">
         <label className="field-label" htmlFor={`${id}-due`}>
           Vencimiento
@@ -415,46 +392,31 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
       </div>
       <div className="field-row">
         <label className="field-label" htmlFor={`${id}-cat`}>
-          Categoría
+          Área
         </label>
         <select id={`${id}-cat`} value={task.categoryId ?? ''} onChange={(e) => save({ categoryId: e.target.value || null })}>
-          <option value="">Sin categoría</option>
+          <option value="">Sin área</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {c.emoji} {c.name}
             </option>
           ))}
         </select>
       </div>
       <div className="field-row">
-        <label className="field-label" htmlFor={`${id}-resp`}>
-          Responsable
+        <label className="field-label" htmlFor={`${id}-goal`}>
+          Meta
         </label>
-        <input
-          id={`${id}-resp`}
-          value={responsible}
-          maxLength={120}
-          placeholder="Opcional"
-          list={`${id}-resp-list`}
-          onChange={(e) => setResponsible(e.target.value)}
-          onBlur={() => responsible.trim() !== task.responsible && save({ responsible: responsible.trim() })}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        />
-        <ResponsibleList id={`${id}-resp-list`} />
-      </div>
-      <div className="field-row">
-        <label className="field-label" htmlFor={`${id}-folio`}>
-          Folio
-        </label>
-        <input
-          id={`${id}-folio`}
-          value={folio}
-          maxLength={120}
-          placeholder="Folio o referencia (opcional)"
-          onChange={(e) => setFolio(e.target.value)}
-          onBlur={() => folio.trim() !== task.folio && save({ folio: folio.trim() })}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        />
+        <select id={`${id}-goal`} value={task.goalId ?? ''} onChange={(e) => save({ goalId: e.target.value || null })}>
+          <option value="">Sin meta</option>
+          {goals
+            .filter((g) => g.status === 'active' || g.id === task.goalId)
+            .map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.emoji} {g.title}
+              </option>
+            ))}
+        </select>
       </div>
       <div className="field-row field-row-top">
         <label className="field-label" htmlFor={`${id}-tag`}>
@@ -518,11 +480,6 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
     </Panel>
   );
 
-  const custom = fieldsHere.length > 0 && (
-    <Panel id="custom" title="Campos personalizados">
-      <CustomFieldsEditor fields={customFields} task={task} onChange={(customValues) => save({ customValues })} />
-    </Panel>
-  );
 
   const docs = (
     <Panel id="docs" title="Documentos" badge={attachmentCount > 0 && <span className="count">{attachmentCount}</span>}>
@@ -530,11 +487,6 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
     </Panel>
   );
 
-  const closure = (
-    <Panel id="closure" title="Seguimiento y cierre" defaultOpen={done}>
-      <ClosureSummary task={task} />
-    </Panel>
-  );
 
   const recurrence = (
     <Panel id="repeat" title="Repetición" badge={task.recurrence && <span className="count">activa</span>} defaultOpen={false}>
@@ -563,27 +515,6 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
     </Panel>
   );
 
-  const history = (
-    <Panel id="history" title="Historial" defaultOpen={false}>
-      <HistoryList taskId={task.id} />
-      <dl className="detail-meta">
-        <div>
-          <dt>Creada</dt>
-          <dd>{formatTimestamp(task.createdAt)}</dd>
-        </div>
-        <div>
-          <dt>Modificada</dt>
-          <dd>{formatTimestamp(task.updatedAt)}</dd>
-        </div>
-        {task.completedAt && (
-          <div>
-            <dt>Completada</dt>
-            <dd>{formatTimestamp(task.completedAt)}</dd>
-          </div>
-        )}
-      </dl>
-    </Panel>
-  );
 
   return (
     <div className="detail-inner">
@@ -599,10 +530,7 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
             </div>
             <div className="detail-col">
               {docs}
-              {closure}
-              {custom}
               {recurrence}
-              {history}
             </div>
           </div>
         ) : (
@@ -610,29 +538,13 @@ function TaskDetail({ task, expanded, onToggleExpand, onClose }: { task: Task; e
             {titleBlock}
             {planning}
             {subtasks}
-            {custom}
             {docs}
-            {closure}
             {recurrence}
             {notesBlock}
-            {history}
           </>
         )}
         <p className="hint detail-hint">Los cambios se guardan automáticamente · ⌘S guarda y cierra</p>
       </div>
     </div>
-  );
-}
-
-/** Sugerencias de responsables ya usados. */
-function ResponsibleList({ id }: { id: string }) {
-  const { tasks } = useData();
-  const names = [...new Set(tasks.map((t) => t.responsible).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-MX'));
-  return (
-    <datalist id={id}>
-      {names.slice(0, 100).map((n) => (
-        <option key={n} value={n} />
-      ))}
-    </datalist>
   );
 }

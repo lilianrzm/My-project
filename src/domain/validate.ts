@@ -1,5 +1,9 @@
 import { isValidISODate, isValidTime } from './dates';
 import type {
+  Goal,
+  Habit,
+  HabitLog,
+  JournalEntry,
   Activity,
   Appearance,
   Attachment,
@@ -58,6 +62,13 @@ const color = (v: unknown, fallback: string): string =>
   typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
 
 export class ValidationError extends Error {}
+
+/** Un emoji (o texto muy corto) para identificar áreas, metas y hábitos. */
+export const emoji = (v: unknown, fallback: string): string => {
+  if (typeof v !== 'string') return fallback;
+  const t = v.trim();
+  return t && [...t].length <= 4 ? t : fallback;
+};
 
 export function normalizePriority(v: unknown): Priority {
   return v === 1 || v === 2 || v === 3 ? v : 0;
@@ -130,6 +141,7 @@ export function normalizeTask(v: unknown, now = new Date().toISOString()): Task 
     folio: str(v.folio, LIMITS.name).trim(),
     closure: normalizeClosure(v.closure),
     customValues: normalizeCustomValues(v.customValues),
+    goalId: idOrNull(v.goalId),
     todayDate: isValidISODate(v.todayDate) ? v.todayDate : null,
     recurrence: normalizeRecurrence(v.recurrence, dueDate),
     seriesId: idOrNull(v.seriesId),
@@ -166,6 +178,7 @@ export function normalizeCategory(v: unknown, now = new Date().toISOString()): C
   return {
     id: v.id,
     name,
+    emoji: emoji(v.emoji, '✨'),
     color: color(v.color, '#A7B09A'),
     order: num(v.order, 0),
     createdAt,
@@ -299,8 +312,8 @@ function normalizeAppearance(v: unknown): Appearance {
   const a = isObj(v) ? v : {};
   return {
     font: a.font === 'editorial' || a.font === 'clean' ? a.font : DEFAULT_APPEARANCE.font,
-    palette: a.palette === 'rose' || a.palette === 'sage' || a.palette === 'blue' ? a.palette : DEFAULT_APPEARANCE.palette,
-    radius: a.radius === 'round' ? 'round' : 'soft',
+    palette: a.palette === 'olive' || a.palette === 'rose' || a.palette === 'sage' || a.palette === 'blue' ? a.palette : DEFAULT_APPEARANCE.palette,
+    radius: a.radius === 'soft' ? 'soft' : a.radius === 'round' ? 'round' : DEFAULT_APPEARANCE.radius,
   };
 }
 
@@ -319,6 +332,7 @@ export function normalizeSettings(v: unknown): Settings {
     todayGroupBy:
       s.todayGroupBy === 'none' || s.todayGroupBy === 'project' || s.todayGroupBy === 'priority' ? s.todayGroupBy : 'category',
     closurePrompt: s.closurePrompt !== false,
+    celebrations: s.celebrations !== false,
     closureResults: normalizeOptions(s.closureResults, DEFAULT_CLOSURE_RESULTS),
     attentionTypes: normalizeOptions(s.attentionTypes, DEFAULT_ATTENTION_TYPES),
     analytics: {
@@ -326,5 +340,71 @@ export function normalizeSettings(v: unknown): Settings {
       hidden: Array.isArray((s.analytics as Obj | undefined)?.hidden) ? ((s.analytics as Obj).hidden as unknown[]).filter(isId).slice(0, 50) : [],
       columns: Array.isArray((s.analytics as Obj | undefined)?.columns) ? ((s.analytics as Obj).columns as unknown[]).filter(isId).slice(0, 200) : [],
     },
+  };
+}
+
+
+const GOAL_KINDS = ['count', 'tasks', 'check'];
+
+export function normalizeGoal(v: unknown, now = new Date().toISOString()): Goal {
+  if (!isObj(v) || !isId(v.id)) throw new ValidationError('Una meta no tiene identificador.');
+  const title = str(v.title, LIMITS.title).trim();
+  if (!title) throw new ValidationError(`La meta ${v.id} no tiene título.`);
+  const createdAt = ts(v.createdAt, now);
+  const status = v.status === 'achieved' || v.status === 'archived' ? v.status : 'active';
+  return {
+    id: v.id,
+    title,
+    emoji: emoji(v.emoji, '🎯'),
+    color: color(v.color, '#F4A6B8'),
+    categoryId: idOrNull(v.categoryId),
+    kind: GOAL_KINDS.includes(v.kind as string) ? (v.kind as Goal['kind']) : 'check',
+    target: Math.max(0, num(v.target, 1)),
+    current: Math.max(0, num(v.current, 0)),
+    unit: str(v.unit, 40).trim(),
+    dueDate: isValidISODate(v.dueDate) ? v.dueDate : null,
+    why: str(v.why, LIMITS.description),
+    status,
+    achievedAt: status === 'achieved' ? tsOrNull(v.achievedAt) ?? ts(v.updatedAt, now) : null,
+    order: num(v.order, 0),
+    createdAt,
+    updatedAt: ts(v.updatedAt, createdAt),
+  };
+}
+
+export function normalizeHabit(v: unknown, now = new Date().toISOString()): Habit {
+  if (!isObj(v) || !isId(v.id)) throw new ValidationError('Un hábito no tiene identificador.');
+  const title = str(v.title, LIMITS.title).trim();
+  if (!title) throw new ValidationError(`El hábito ${v.id} no tiene título.`);
+  const createdAt = ts(v.createdAt, now);
+  return {
+    id: v.id,
+    title,
+    emoji: emoji(v.emoji, '✨'),
+    color: color(v.color, '#9FD3A8'),
+    categoryId: idOrNull(v.categoryId),
+    weekdays: Array.isArray(v.weekdays) ? [...new Set(v.weekdays.filter((d): d is number => Number.isInteger(d) && d >= 0 && d <= 6))].sort() : [],
+    archived: v.archived === true,
+    order: num(v.order, 0),
+    createdAt,
+    updatedAt: ts(v.updatedAt, createdAt),
+  };
+}
+
+export function normalizeHabitLog(v: unknown): HabitLog | null {
+  if (!isObj(v) || !isId(v.habitId) || !isValidISODate(v.date)) return null;
+  return { id: `${v.habitId}:${v.date}`, habitId: v.habitId, date: v.date, at: ts(v.at, new Date().toISOString()) };
+}
+
+export function normalizeJournal(v: unknown): (JournalEntry & { id: string }) | null {
+  if (!isObj(v) || !isValidISODate(v.date)) return null;
+  const mood = v.mood === 1 || v.mood === 2 || v.mood === 3 || v.mood === 4 || v.mood === 5 ? v.mood : null;
+  return {
+    id: v.date,
+    date: v.date,
+    mood,
+    gratitude: str(v.gratitude, LIMITS.description),
+    proud: str(v.proud, LIMITS.description),
+    updatedAt: ts(v.updatedAt, new Date().toISOString()),
   };
 }

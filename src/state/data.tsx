@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { Category, CustomField, Project, Settings, Tag, Task } from '../domain/types';
+import type { Category, CustomField, Goal, Habit, HabitLog, JournalEntry, Project, Settings, Tag, Task } from '../domain/types';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { normalizeSettings } from '../domain/validate';
 
@@ -14,6 +14,10 @@ export interface DataState {
   settings: Settings;
   /** Campos personalizados (incluye archivados), en orden de visualización. */
   customFields: CustomField[];
+  goals: Goal[];
+  habits: Habit[];
+  habitLogs: HabitLog[];
+  journal: JournalEntry[];
   projectById: Map<string, Project>;
   categoryById: Map<string, Category>;
   tagById: Map<string, Tag>;
@@ -33,6 +37,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const tags = useLiveQuery(() => db.tags.toArray(), []);
   const settingsRow = useLiveQuery(() => db.settings.get('settings'), []);
   const customFields = useLiveQuery(() => db.customFields.orderBy('order').toArray(), []);
+  const goals = useLiveQuery(() => db.goals.orderBy('order').toArray(), []);
+  const habits = useLiveQuery(() => db.habits.orderBy('order').toArray(), []);
+  const habitLogs = useLiveQuery(() => db.habitLogs.toArray(), []);
+  const journal = useLiveQuery(() => db.journal.toArray(), []);
 
   const projectById = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p])), [projects]);
   const categoryById = useMemo(() => new Map((categories ?? []).map((c) => [c.id, c])), [categories]);
@@ -56,12 +64,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       tags: sortedTags,
       settings,
       customFields: customFields ?? [],
+      goals: goals ?? [],
+      habits: habits ?? [],
+      habitLogs: habitLogs ?? [],
+      journal: journal ?? [],
       projectById,
       categoryById,
       tagById,
       tagNames,
     }),
-    [tasks, projects, categories, sortedTags, tags, settings, customFields, projectById, categoryById, tagById, tagNames],
+    [tasks, projects, categories, sortedTags, tags, settings, customFields, goals, habits, habitLogs, journal, projectById, categoryById, tagById, tagNames],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

@@ -34,7 +34,7 @@ describe('migración v1 → v2', () => {
     expect(t.responsible).toBe('');
     expect(t.customValues).toEqual({});
     expect(t.subtasks[0]).toMatchObject({ id: 's', done: true, completedAt: null });
-    expect(nu.verno).toBe(2);
+    expect(nu.verno).toBe(3);
     expect((await nu.meta.get('preMigration-v2'))?.value).toBeTruthy();
     nu.close();
     await db.open();
@@ -215,7 +215,7 @@ describe('Excel y extracción', () => {
     const bytes = buildActivitiesWorkbook([t], ctx, { metrics: m, filters: [], scope: 'all' });
     const files = unzipSync(bytes);
     const wb = strFromU8(files['xl/workbook.xml']);
-    expect(wb).toContain('name="Actividades"');
+    expect(wb).toContain('name="Tareas"');
     expect(wb).toContain('name="Subtareas"');
     expect(wb).toContain('name="Resumen"');
     const s1 = strFromU8(files['xl/worksheets/sheet1.xml']);

@@ -3,7 +3,8 @@ import * as repo from '../db/repo';
 import { addDays, formatRelative, startOfWeek } from '../domain/dates';
 import type { Priority, Task } from '../domain/types';
 import { useFeedback, useUI } from '../state/ui';
-import { useData } from '../state/data';
+import { celebrate } from '../celebrate';
+import { cheer } from '../domain/personal';
 
 export function errorMessage(e: unknown): string {
   if (e instanceof Error && e.message) {
@@ -17,10 +18,8 @@ export function errorMessage(e: unknown): string {
 
 /** Acciones sobre tareas con avisos y "deshacer". Las funciones son estables. */
 export function useTaskActions() {
-  const { toast } = useFeedback();
-  const { today, selectTask, openClosure } = useUI();
-  const { settings } = useData();
-  const closurePrompt = settings.closurePrompt;
+  const { toast, confirm } = useFeedback();
+  const { today, selectTask } = useUI();
 
   return useMemo(() => {
     const safe = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -33,16 +32,27 @@ export function useTaskActions() {
     };
 
     return {
-      toggle: (task: Task) =>
+      toggle: (task: Task, origin?: { x: number; y: number }) =>
         safe(async () => {
           const wasOpen = task.status === 'open';
-          const { next } = await repo.toggleTask(task);
+          let completeSubtasks = false;
+          const pending = repo.pendingSubtasks(task);
+          if (wasOpen && pending > 0) {
+            completeSubtasks = await confirm({
+              title: pending === 1 ? 'Queda 1 subtarea' : `Quedan ${pending} subtareas`,
+              message: '¿La marco también como hecha y completo la tarea?',
+              confirmLabel: 'Completar todo',
+              cancelLabel: 'Todavía no',
+            });
+            if (!completeSubtasks) return;
+          }
+          const { next } = wasOpen ? await repo.completeTask(task.id, { completeSubtasks }) : await repo.toggleTask(task);
           if (wasOpen) {
+            celebrate({ origin });
             toast({
-              message: next?.dueDate ? `Completada · se repite ${formatRelative(next.dueDate, today).toLowerCase()}` : 'Tarea completada',
+              message: next?.dueDate ? `${cheer()} · vuelve ${formatRelative(next.dueDate, today).toLowerCase()}` : cheer(),
               action: { label: 'Deshacer', run: () => void safe(() => repo.reopenTask(task.id)) },
             });
-            if (closurePrompt) openClosure(task.id);
           }
         }),
       update: (id: string, patch: Partial<Task>) => safe(() => repo.updateTask(id, patch)),
@@ -82,7 +92,7 @@ export function useTaskActions() {
       cancel: (task: Task) =>
         safe(async () => {
           await repo.cancelTask(task.id);
-          toast({ message: 'Actividad cancelada', action: { label: 'Deshacer', run: () => void safe(() => repo.reopenTask(task.id)) } });
+          toast({ message: 'Tarea cancelada', action: { label: 'Deshacer', run: () => void safe(() => repo.reopenTask(task.id)) } });
         }),
       setPriority: (task: Task, priority: Priority) => safe(() => repo.updateTask(task.id, { priority })),
       toggleToday: (task: Task) =>
@@ -90,7 +100,7 @@ export function useTaskActions() {
       reorder: (ids: string[]) => safe(() => repo.reorderTasks(ids)),
       create: (draft: repo.TaskDraft) => safe(() => repo.createTask(draft)),
     };
-  }, [toast, today, selectTask, openClosure, closurePrompt]);
+  }, [toast, confirm, today, selectTask]);
 }
 
 export type TaskActions = ReturnType<typeof useTaskActions>;

@@ -37,7 +37,7 @@ export function TaskList({ tasks, reorderable = false, showProject = true, showD
   const idsRef = useRef(ids);
   idsRef.current = ids;
 
-  const onToggle = useCallback((t: Task) => void actions.toggle(t), [actions]);
+  const onToggle = useCallback((t: Task, origin?: { x: number; y: number }) => void actions.toggle(t, origin), [actions]);
   const onOpen = useCallback((id: string) => selectTask(id), [selectTask]);
 
   const onMove = useCallback(

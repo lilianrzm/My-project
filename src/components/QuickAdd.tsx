@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { CalendarDays, Flag, FolderClosed, Sun, Tag as TagIcon } from 'lucide-react';
+import { CalendarDays, Flag, FolderClosed, Sun, Target } from 'lucide-react';
 import type { Priority } from '../domain/types';
 import { PRIORITY_LABEL } from '../domain/types';
 import { addDays, formatRelative } from '../domain/dates';
@@ -7,11 +7,12 @@ import { useData } from '../state/data';
 import { useUI } from '../state/ui';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { Modal } from './ui';
+import { AreaChips } from './Pickers';
 
 /** Captura rápida: escribe el título y pulsa Enter. Todo lo demás es opcional. */
 export function QuickAdd() {
   const { quickAdd, closeQuickAdd, today } = useUI();
-  const { projects, categories } = useData();
+  const { projects, goals } = useData();
   const actions = useTaskActions();
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +23,7 @@ export function QuickAdd() {
   const [priority, setPriority] = useState<Priority>(0);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [goalId, setGoalId] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,6 +37,7 @@ export function QuickAdd() {
     setPriority(d.priority ?? 0);
     setProjectId(d.projectId ?? null);
     setCategoryId(d.categoryId ?? null);
+    setGoalId(d.goalId ?? null);
     setMore(false);
     setError('');
     // iPadOS solo muestra el teclado si el foco ocurre dentro del gesto del usuario; autoFocus lo resuelve.
@@ -57,6 +60,7 @@ export function QuickAdd() {
       priority,
       projectId,
       categoryId,
+      goalId,
     });
     setBusy(false);
     if (!created) return;
@@ -88,7 +92,7 @@ export function QuickAdd() {
           id={`${id}-title`}
           ref={inputRef}
           className="qa-input"
-          placeholder="¿Qué quieres recordar?"
+          placeholder="¿Qué quieres hacer?"
           autoComplete="off"
           autoFocus
           enterKeyHint="done"
@@ -147,6 +151,8 @@ export function QuickAdd() {
           {dateLabel && !more && <span className="qa-summary">{dateLabel}</span>}
         </div>
 
+        <AreaChips value={categoryId} onChange={setCategoryId} allowNone={false} />
+
         {more && (
           <div className="qa-more">
             <label className="qa-field">
@@ -186,14 +192,16 @@ export function QuickAdd() {
               </select>
             </label>
             <label className="qa-field">
-              <TagIcon size={16} aria-hidden="true" />
-              <select aria-label="Categoría" value={categoryId ?? ''} onChange={(e) => setCategoryId(e.target.value || null)}>
-                <option value="">Sin categoría</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              <Target size={16} aria-hidden="true" />
+              <select aria-label="Meta" value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
+                <option value="">Sin meta</option>
+                {goals
+                  .filter((g) => g.status === 'active' || g.id === goalId)
+                  .map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.emoji} {g.title}
+                    </option>
+                  ))}
               </select>
             </label>
           </div>

@@ -149,6 +149,27 @@
 /* ------------------------------------------------------------------ */
 /* Paletas (todas claras; texto grafito y acentos fuertes ≥ 4.5:1)       */
 /* ------------------------------------------------------------------ */
+[data-palette='sorbet'] {
+  --c-warm-white: #fffaf7;
+  --c-powder-pink: #ffe1e8;
+  --c-olive: #ec8fa3;
+  --c-olive-strong: #a8455e;
+  --c-olive-deep: #8c3a4f;
+  --c-olive-soft: #fde9ee;
+  --c-sage: #9fd3a8;
+  --c-pink-soft: #fff1f4;
+  --c-pink-strong: #e8879c;
+  --c-beige-soft: #fff4f1;
+  --c-beige: #f7e6e1;
+  --border: #f2deda;
+  --border-strong: #e6cbc6;
+  --chart-1: #ec8fa3;
+  --chart-2: #f7b58c;
+  --chart-3: #9fd3a8;
+  --chart-4: #9dbbe8;
+  --chart-5: #b9a3e3;
+  --chart-6: #f5cf6b;
+}
 [data-palette='rose'] {
   --c-warm-white: #fff9f7;
   --c-powder-pink: #f4dce2;

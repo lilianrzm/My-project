@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Archive, ArrowDown, ArrowUp, Download, HardDrive, Pencil, Plus, Share, SquarePlus, Trash2, Upload } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, Download, FileSpreadsheet, HardDrive, Pencil, Plus, Share, SquarePlus, Trash2, Upload } from 'lucide-react';
 import { useData } from '../state/data';
-import { useFeedback } from '../state/ui';
+import { useFeedback, useUI } from '../state/ui';
 import type { Category, Settings, SortMode } from '../domain/types';
 import { SWATCHES } from '../domain/types';
 import * as repo from '../db/repo';
@@ -25,7 +25,8 @@ import { Modal, PageHeader, SORT_LABEL } from '../components/ui';
 import { ColorPicker } from './Projects';
 import { Logo } from '../components/Logo';
 import { AppearanceCard } from './SettingsAppearance';
-import { CustomFieldsCard, TrackingCard } from './SettingsTracking';
+import { EmojiPicker } from '../components/Pickers';
+import { celebrate } from '../celebrate';
 
 export function SettingsPage() {
   return (
@@ -35,8 +36,6 @@ export function SettingsPage() {
       <AppearanceCard />
       <BackupCard />
       <CategoriesCard />
-      <TrackingCard />
-      <CustomFieldsCard />
       <TagsCard />
       <StorageCard />
       <InstallCard />
@@ -122,6 +121,21 @@ function PreferencesCard() {
             Mostrar en las listas
           </label>
         </div>
+        <div className="field">
+          <span className="field-label">Celebraciones</span>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={settings.celebrations}
+              onChange={(e) => {
+                void save({ celebrations: e.target.checked });
+                if (e.target.checked) setTimeout(() => celebrate(), 50);
+              }}
+            />
+            <span className="switch-track" aria-hidden="true" />
+            Confeti al completar 🎉
+          </label>
+        </div>
       </div>
     </Card>
   );
@@ -129,7 +143,44 @@ function PreferencesCard() {
 
 /* ------------------------------------------------------------------ */
 
+/** Exporta tareas, subtareas, metas y hábitos a un Excel real (.xlsx) para consultarlos. */
+async function exportExcel(data: ReturnType<typeof useData>, today: string) {
+  const [{ buildActivitiesWorkbook }, { XLSX_MIME }, { computeMetrics, EMPTY_ANALYTICS_FILTER }] = await Promise.all([
+    import('../export/excel'),
+    import('../export/xlsx'),
+    import('../domain/analytics'),
+  ]);
+  const attachments = await import('../db/db').then((m) => m.db.attachments.toArray());
+  const attachmentCount = new Map<string, number>();
+  for (const a of attachments) attachmentCount.set(a.taskId, (attachmentCount.get(a.taskId) ?? 0) + 1);
+  const lookups = {
+    categoryName: (id: string) => data.categoryById.get(id)?.name,
+    projectName: (id: string) => data.projectById.get(id)?.name,
+    resultName: () => undefined,
+  };
+  const metrics = computeMetrics(data.tasks, EMPTY_ANALYTICS_FILTER, today, data.settings.weekStart, lookups);
+  const bytes = buildActivitiesWorkbook(
+    data.tasks,
+    {
+      today,
+      categoryById: data.categoryById,
+      projectById: data.projectById,
+      tagById: data.tagById,
+      results: [],
+      attentionTypes: [],
+      customFields: data.customFields.filter((f) => !f.archived),
+      attachmentCount,
+      goalById: new Map(data.goals.map((g) => [g.id, g])),
+    },
+    { metrics, filters: [], scope: 'all' },
+    { goals: data.goals, habits: data.habits, habitLogs: data.habitLogs, today },
+  );
+  return deliverFile(new Blob([bytes as BlobPart], { type: XLSX_MIME }), `the-daily-edit-${today}.xlsx`);
+}
+
 function BackupCard() {
+  const data = useData();
+  const { today } = useUI();
   const { toast, confirm } = useFeedback();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -219,8 +270,9 @@ function BackupCard() {
         {lastExport && <> Último respaldo generado: {formatTimestamp(lastExport)}.</>}
       </p>
       <p className="muted small">
-        <strong>Exportar mis datos</strong> crea un JSON con toda la información y configuración, pero sin el contenido de los documentos
-        adjuntos. <strong>Respaldo completo</strong> crea un ZIP que también incluye los documentos.
+        <strong>Exportar mis datos</strong> crea un JSON con toda tu información (sin el contenido de los documentos).{' '}
+        <strong>Respaldo completo</strong> crea un ZIP que también incluye los documentos. <strong>Excel</strong> es para consultar tus tareas, metas y hábitos
+        en una hoja de cálculo; no sirve como respaldo.
       </p>
       <div className="row-wrap">
         <button type="button" className="btn btn-primary" onClick={() => void doExport()} disabled={busy}>
@@ -228,6 +280,21 @@ function BackupCard() {
         </button>
         <button type="button" className="btn btn-quiet" onClick={() => void doExport(true)} disabled={busy}>
           <Archive size={17} aria-hidden="true" /> Respaldo completo (.zip)
+        </button>
+        <button
+          type="button"
+          className="btn btn-quiet"
+          disabled={busy}
+          onClick={async () => {
+            try {
+              const how = await exportExcel(data, today);
+              if (how !== 'cancelled') toast({ message: 'Excel generado ✨', tone: 'success' });
+            } catch (e) {
+              toast({ message: `No se pudo generar el Excel. ${errorMessage(e)}`, tone: 'error' });
+            }
+          }}
+        >
+          <FileSpreadsheet size={17} aria-hidden="true" /> Exportar a Excel
         </button>
         <button type="button" className="btn btn-quiet" onClick={() => fileRef.current?.click()}>
           <Upload size={17} aria-hidden="true" /> Importar respaldo
@@ -342,7 +409,7 @@ function ImportDialog({
             <dd>{d.projects.length}</dd>
           </div>
           <div>
-            <dt>Categorías</dt>
+            <dt>Áreas</dt>
             <dd>{d.categories.length}</dd>
           </div>
           <div>
@@ -354,8 +421,12 @@ function ImportDialog({
             <dd>{d.attachments.length}</dd>
           </div>
           <div>
-            <dt>Campos personalizados</dt>
-            <dd>{d.customFields.length}</dd>
+            <dt>Metas</dt>
+            <dd>{d.goals.length}</dd>
+          </div>
+          <div>
+            <dt>Hábitos</dt>
+            <dd>{d.habits.length}</dd>
           </div>
         </dl>
         {parsed.warnings.length > 0 && (
@@ -445,11 +516,14 @@ function CategoriesCard() {
   };
 
   return (
-    <Card title="Categorías">
+    <Card title="Áreas de tu vida">
+      <p className="muted small">Cada área tiene su emoji y su color. El trabajo es un área más.</p>
       <ul className="manage-list">
         {categories.map((c, i) => (
           <li key={c.id} className="manage-item">
-            <span className="dot dot-lg" style={{ background: c.color }} aria-hidden="true" />
+            <span className="area-badge" style={{ background: c.color }} aria-hidden="true">
+              {c.emoji}
+            </span>
             <span className="manage-name">{c.name}</span>
             <span className="muted small">{countFor(c.id)} tareas</span>
             <div className="manage-actions">
@@ -477,7 +551,7 @@ function CategoriesCard() {
       </ul>
       {categories.length === 0 && <p className="muted small">No hay categorías.</p>}
       <button type="button" className="btn btn-quiet" onClick={() => setEditing('new')}>
-        <Plus size={16} aria-hidden="true" /> Nueva categoría
+        <Plus size={16} aria-hidden="true" /> Nueva área
       </button>
       <CategoryForm category={editing} onClose={() => setEditing(null)} />
       <DeleteCategoryDialog category={deleting} count={deleting ? countFor(deleting.id) : 0} onClose={() => setDeleting(null)} />
@@ -489,19 +563,21 @@ function CategoryForm({ category, onClose }: { category: Category | 'new' | null
   const { toast } = useFeedback();
   const [name, setName] = useState('');
   const [color, setColor] = useState(SWATCHES[1].value);
+  const [emoji, setEmoji] = useState('✨');
   const [error, setError] = useState('');
   useEffect(() => {
     if (!category) return;
     setName(category === 'new' ? '' : category.name);
     setColor(category === 'new' ? SWATCHES[1].value : category.color);
+    setEmoji(category === 'new' ? '✨' : category.emoji);
     setError('');
   }, [category]);
 
   const submit = async () => {
     try {
-      if (category === 'new') await repo.createCategory(name, color);
-      else if (category) await repo.updateCategory(category.id, { name: name.trim(), color });
-      toast({ message: 'Categoría guardada', tone: 'success' });
+      if (category === 'new') await repo.createCategory(name, color, emoji);
+      else if (category) await repo.updateCategory(category.id, { name: name.trim(), color, emoji });
+      toast({ message: 'Área guardada', tone: 'success' });
       onClose();
     } catch (e) {
       setError(errorMessage(e));
@@ -509,7 +585,7 @@ function CategoryForm({ category, onClose }: { category: Category | 'new' | null
   };
 
   return (
-    <Modal open={!!category} onClose={onClose} title={category === 'new' ? 'Nueva categoría' : 'Editar categoría'} size="sm">
+    <Modal open={!!category} onClose={onClose} title={category === 'new' ? 'Nueva área' : 'Editar área'}>
       <form
         className="form"
         onSubmit={(e) => {
@@ -526,6 +602,10 @@ function CategoryForm({ category, onClose }: { category: Category | 'new' | null
             {error}
           </p>
         )}
+        <fieldset className="field">
+          <legend className="field-label">Emoji</legend>
+          <EmojiPicker value={emoji} onChange={setEmoji} />
+        </fieldset>
         <fieldset className="field">
           <legend className="field-label">Color</legend>
           <ColorPicker value={color} onChange={setColor} />
@@ -553,7 +633,7 @@ function DeleteCategoryDialog({ category, count, onClose }: { category: Category
   const run = async () => {
     try {
       const n = await repo.deleteCategory(category.id, target || null);
-      toast({ message: n ? `Categoría eliminada · ${n} tarea(s) reasignadas` : 'Categoría eliminada', tone: 'success' });
+      toast({ message: n ? `Área eliminada · ${n} tarea(s) reasignadas` : 'Área eliminada', tone: 'success' });
       onClose();
     } catch (e) {
       toast({ message: errorMessage(e), tone: 'error' });
@@ -565,14 +645,14 @@ function DeleteCategoryDialog({ category, count, onClose }: { category: Category
       <div className="form">
         <p className="confirm-text">
           {count
-            ? `Esta categoría tiene ${count} tarea(s). Las tareas no se eliminarán: elige qué hacer con ellas.`
-            : 'Esta categoría no tiene tareas.'}
+            ? `Esta área tiene ${count} tarea(s). Las tareas no se eliminarán: elige qué hacer con ellas.`
+            : 'Esta área no tiene tareas.'}
         </p>
         {count > 0 && (
           <label className="field">
             <span className="field-label">Reasignar tareas a</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              <option value="">Dejarlas sin categoría</option>
+              <option value="">Dejarlas sin área</option>
               {categories
                 .filter((c) => c.id !== category.id)
                 .map((c) => (
@@ -819,7 +899,7 @@ function AboutCard() {
         <div>
           <p className="serif-name">The Daily Edit</p>
           <p className="muted small">A little space for everything that matters.</p>
-          <p className="muted small">Versión {__APP_VERSION__} · esquema de datos v2</p>
+          <p className="muted small">Versión {__APP_VERSION__} · esquema de datos v3</p>
         </div>
       </div>
       <p className="muted small">

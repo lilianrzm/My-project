@@ -120,6 +120,8 @@ export interface Task {
   closure: Closure | null;
   /** Valores de campos personalizados: id del campo → valor. */
   customValues: Record<string, CustomValue>;
+  /** Meta a la que contribuye esta tarea (opcional). */
+  goalId: string | null;
   /** Marcada manualmente para atender "Hoy" (fecha en la que se marcó). */
   todayDate: ISODate | null;
   recurrence: Recurrence | null;
@@ -148,6 +150,8 @@ export interface Project {
 export interface Category {
   id: string;
   name: string;
+  /** Emoji que identifica el área de vida. */
+  emoji: string;
   color: string;
   order: number;
   createdAt: Timestamp;
@@ -159,6 +163,75 @@ export interface Tag {
   name: string;
   createdAt: Timestamp;
 }
+
+/* ------------------------------------------------------------------ */
+/* Logro personal: metas, hábitos y diario                              */
+/* ------------------------------------------------------------------ */
+
+/** count = número con unidad (12 libros, $20,000); tasks = tareas vinculadas; check = se logra o no. */
+export type GoalKind = 'count' | 'tasks' | 'check';
+export type GoalStatus = 'active' | 'achieved' | 'archived';
+
+export interface Goal {
+  id: string;
+  title: string;
+  emoji: string;
+  color: string;
+  categoryId: string | null;
+  kind: GoalKind;
+  target: number;
+  current: number;
+  unit: string;
+  dueDate: ISODate | null;
+  /** ¿Por qué es importante para mí? */
+  why: string;
+  status: GoalStatus;
+  achievedAt: Timestamp | null;
+  order: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface Habit {
+  id: string;
+  title: string;
+  emoji: string;
+  color: string;
+  categoryId: string | null;
+  /** Días en que toca (0 = domingo … 6 = sábado). Vacío = todos los días. */
+  weekdays: number[];
+  archived: boolean;
+  order: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Un registro por hábito y día cumplido. id = `${habitId}:${date}` (evita duplicados). */
+export interface HabitLog {
+  id: string;
+  habitId: string;
+  date: ISODate;
+  at: Timestamp;
+}
+
+export type Mood = 1 | 2 | 3 | 4 | 5;
+
+/** Diario: una entrada por día. */
+export interface JournalEntry {
+  date: ISODate;
+  mood: Mood | null;
+  gratitude: string;
+  proud: string;
+  updatedAt: Timestamp;
+}
+
+export const MOODS: { value: Mood; emoji: string; label: string }[] = [
+  { value: 1, emoji: '😔', label: 'Difícil' },
+  { value: 2, emoji: '😕', label: 'Regular' },
+  { value: 3, emoji: '🙂', label: 'Bien' },
+  { value: 4, emoji: '😊', label: 'Muy bien' },
+  { value: 5, emoji: '🤩', label: 'Increíble' },
+];
 
 export type ActivityType =
   | 'created'
@@ -192,7 +265,7 @@ export interface Activity {
 export type SortMode = 'manual' | 'due' | 'priority' | 'created' | 'title';
 
 export type FontSet = 'playful' | 'editorial' | 'clean';
-export type Palette = 'olive' | 'rose' | 'sage' | 'blue';
+export type Palette = 'sorbet' | 'olive' | 'rose' | 'sage' | 'blue';
 export type RadiusStyle = 'soft' | 'round';
 
 export interface Appearance {
@@ -224,6 +297,8 @@ export interface Settings {
   closureResults: Option[];
   attentionTypes: Option[];
   analytics: AnalyticsLayout;
+  /** Pequeña celebración (confeti) al completar cosas. */
+  celebrations: boolean;
 }
 
 export interface SettingRow {
@@ -236,7 +311,7 @@ export interface MetaRow {
   value: unknown;
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { font: 'playful', palette: 'olive', radius: 'soft' };
+export const DEFAULT_APPEARANCE: Appearance = { font: 'playful', palette: 'sorbet', radius: 'round' };
 
 export const DEFAULT_CLOSURE_RESULTS: Option[] = [
   { id: 'res-atendida', label: 'Atendida' },
@@ -268,6 +343,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closureResults: DEFAULT_CLOSURE_RESULTS,
   attentionTypes: DEFAULT_ATTENTION_TYPES,
   analytics: { order: [], hidden: [], columns: [] },
+  celebrations: true,
 };
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -303,12 +379,21 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
 
 /** Paleta discreta para categorías y proyectos (tonos apagados, coherentes con la marca). */
 export const SWATCHES: { value: string; label: string }[] = [
-  { value: '#81866A', label: 'Olivo' },
-  { value: '#A7B09A', label: 'Salvia' },
-  { value: '#D9A9B4', label: 'Rosa empolvado' },
+  { value: '#F4A6B8', label: 'Rosa' },
+  { value: '#F7B58C', label: 'Durazno' },
+  { value: '#F5CF6B', label: 'Sol' },
+  { value: '#9FD3A8', label: 'Menta' },
+  { value: '#8FC9C4', label: 'Aqua' },
+  { value: '#9DBBE8', label: 'Cielo' },
+  { value: '#B9A3E3', label: 'Lavanda' },
+  { value: '#E59AC8', label: 'Orquídea' },
+  { value: '#A9B28A', label: 'Olivo' },
   { value: '#C9B8A3', label: 'Arena' },
-  { value: '#9DB0BF', label: 'Niebla azul' },
-  { value: '#B7A6C4', label: 'Lavanda' },
-  { value: '#D4B483', label: 'Miel' },
-  { value: '#A39E93', label: 'Piedra' },
+];
+
+/** Emojis sugeridos para áreas, metas y hábitos. */
+export const EMOJI_CHOICES = [
+  '🌿', '💪', '🧘', '🏃', '🥗', '💧', '😴', '📚', '✍️', '🎨',
+  '🎵', '💼', '💻', '💸', '🏠', '🧺', '🪴', '🐾', '❤️', '👯',
+  '✈️', '🎯', '⭐', '✨', '🌸', '☀️', '🌙', '🧠', '📷', '🍳',
 ];

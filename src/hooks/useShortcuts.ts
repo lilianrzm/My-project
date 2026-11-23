@@ -33,7 +33,9 @@ export function useShortcuts() {
           c: { name: 'calendar' },
           d: { name: 'dashboard' },
           u: { name: 'upcoming' },
-          a: { name: 'analysis' },
+          a: { name: 'achievements' },
+          b: { name: 'habits' },
+          m: { name: 'goals' },
         };
         if (map[k]) {
           e.preventDefault();
