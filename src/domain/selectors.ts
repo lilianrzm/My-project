@@ -181,10 +181,10 @@ export function groupTasks(tasks: Task[], by: TodayGroupBy, ctx: { categories: C
     }
     return out;
   }
-  const items: { id: string; name: string; color: string }[] = by === 'category' ? ctx.categories : ctx.projects;
+  const items: { id: string; name: string; color: string; emoji?: string }[] = by === 'category' ? ctx.categories : ctx.projects;
   for (const it of items) {
     const list = map.get(it.id);
-    if (list?.length) out.push({ key: it.id, label: it.name, color: it.color, tasks: list });
+    if (list?.length) out.push({ key: it.id, label: it.emoji ? `${it.emoji} ${it.name}` : it.name, color: it.color, tasks: list });
     map.delete(it.id);
   }
   const none = map.get('__none');
@@ -192,6 +192,6 @@ export function groupTasks(tasks: Task[], by: TodayGroupBy, ctx: { categories: C
   // Referencias a categorías/proyectos eliminados
   const orphan = [...map.values()].flat();
   const rest = [...(none ?? []), ...orphan];
-  if (rest.length) out.push({ key: '__none', label: by === 'category' ? 'Sin categoría' : 'Sin proyecto', tasks: rest });
+  if (rest.length) out.push({ key: '__none', label: by === 'category' ? 'Sin área' : 'Sin proyecto', tasks: rest });
   return out;
 }

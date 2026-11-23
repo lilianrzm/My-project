@@ -103,7 +103,7 @@ export function AppearanceCard() {
               </span>
               <span className="ap-name">
                 {p.name}
-                {p.id === 'olive' && <span className="muted"> · predeterminada</span>}
+                {p.id === 'sorbet' && <span className="muted"> · predeterminada</span>}
               </span>
               {draft.palette === p.id && <Check className="ap-check" size={16} aria-hidden="true" />}
             </button>
@@ -116,7 +116,7 @@ export function AppearanceCard() {
         <div className="segmented" role="radiogroup" aria-label="Esquinas">
           {(['soft', 'round'] as RadiusStyle[]).map((r) => (
             <button key={r} type="button" role="radio" aria-checked={draft.radius === r} className={`seg${draft.radius === r ? ' is-on' : ''}`} onClick={() => setDraft({ ...draft, radius: r })}>
-              {r === 'soft' ? 'Suaves' : 'Más redondeadas'}
+              {r === 'soft' ? 'Suaves' : 'Redondeadas'}
             </button>
           ))}
         </div>

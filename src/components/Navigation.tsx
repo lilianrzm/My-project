@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
-  BarChart3,
   CalendarDays,
+  Flame,
+  Target,
+  Trophy,
   CalendarRange,
   CheckCircle2,
   FolderClosed,
@@ -17,6 +19,7 @@ import {
 import { useData } from '../state/data';
 import { routeHref, useUI, type Route, type RouteName } from '../state/ui';
 import { isForToday, isInbox, isOverdue } from '../domain/selectors';
+import { isScheduled } from '../domain/personal';
 import { Logo } from './Logo';
 import { Modal } from './ui';
 
@@ -29,8 +32,12 @@ interface NavItem {
 }
 
 function useNavItems(): NavItem[] {
-  const { tasks } = useData();
+  const { tasks, habits, habitLogs } = useData();
   const { today } = useUI();
+  const habitsLeft = useMemo(() => {
+    const done = new Set(habitLogs.filter((l) => l.date === today).map((l) => l.habitId));
+    return habits.filter((h) => !h.archived && isScheduled(h, today) && !done.has(h.id)).length;
+  }, [habits, habitLogs, today]);
   const counts = useMemo(() => {
     let inbox = 0;
     let todayCount = 0;
@@ -45,14 +52,16 @@ function useNavItems(): NavItem[] {
   }, [tasks, today]);
 
   return [
-    { name: 'dashboard', label: 'Dashboard', icon: <LayoutGrid size={19} /> },
-    { name: 'inbox', label: 'Inbox', icon: <Inbox size={19} />, count: counts.inbox },
+    { name: 'dashboard', label: 'Inicio', icon: <LayoutGrid size={19} /> },
     { name: 'today', label: 'Hoy', icon: <Sun size={19} />, count: counts.todayCount, alert: counts.overdue > 0 },
+    { name: 'inbox', label: 'Inbox', icon: <Inbox size={19} />, count: counts.inbox },
     { name: 'upcoming', label: 'Próximamente', icon: <CalendarRange size={19} /> },
+    { name: 'habits', label: 'Hábitos', icon: <Flame size={19} />, count: habitsLeft },
+    { name: 'goals', label: 'Metas', icon: <Target size={19} /> },
     { name: 'projects', label: 'Proyectos', icon: <FolderClosed size={19} /> },
     { name: 'calendar', label: 'Calendario', icon: <CalendarDays size={19} /> },
     { name: 'completed', label: 'Completadas', icon: <CheckCircle2 size={19} /> },
-    { name: 'analysis', label: 'Análisis', icon: <BarChart3 size={19} /> },
+    { name: 'achievements', label: 'Mis logros', icon: <Trophy size={19} /> },
     { name: 'settings', label: 'Configuración', icon: <SettingsIcon size={19} /> },
   ];
 }
@@ -155,8 +164,8 @@ export function BottomNav() {
   const items = useNavItems();
   const { route } = useUI();
   const [more, setMore] = useState(false);
-  const primary: RouteName[] = ['dashboard', 'today', 'inbox', 'projects'];
-  const shortLabel: Partial<Record<RouteName, string>> = { dashboard: 'Inicio' };
+  const primary: RouteName[] = ['dashboard', 'today', 'habits', 'goals'];
+  const shortLabel: Partial<Record<RouteName, string>> = {};
   const rest = items.filter((i) => !primary.includes(i.name));
 
   return (

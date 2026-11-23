@@ -1,24 +1,28 @@
-import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, CalendarRange, FolderClosed, Leaf, Plus, Sun } from 'lucide-react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { ArrowRight, CalendarRange, Flame, Leaf, Plus, Sparkles, Sun, Target } from 'lucide-react';
 import { useData } from '../state/data';
 import { routeHref, useUI } from '../state/ui';
 import { addDays, formatLong, formatRelative, greeting } from '../domain/dates';
-import { completedOn, isForToday, isOverdue, projectProgress, sortTasks } from '../domain/selectors';
+import { completedOn, isForToday, isOverdue, sortTasks } from '../domain/selectors';
+import { activeDays, dayStreak, goalProgress, isScheduled } from '../domain/personal';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { TaskList } from '../components/TaskList';
 import { EmptyState, ProgressBar, ProgressRing } from '../components/ui';
+import { JournalCard } from '../components/Journal';
+import { HabitCheck } from './Habits';
 
 const SUBTITLES = [
-  "Let's make today a good one.",
-  'One thing at a time.',
-  'Small steps, beautifully done.',
-  'Make space for what matters.',
-  'A calm mind, a clear page.',
+  '¡Hoy puede ser un gran día! ✨',
+  'Un paso a la vez, a tu ritmo. 🌱',
+  'Haz espacio para lo que te importa. 🌸',
+  'Pequeños pasos, grandes logros. 💫',
+  'Hoy también cuenta. ☀️',
+  'Celebra cada avance, por pequeño que sea. 🎉',
 ];
 
 export function Dashboard() {
-  const { tasks, projects, settings } = useData();
-  const { today, openQuickAdd } = useUI();
+  const { tasks, settings, categories, habits, habitLogs, goals } = useData();
+  const { today, openQuickAdd, navigate } = useUI();
   const actions = useTaskActions();
   const [quick, setQuick] = useState('');
   const quickRef = useRef<HTMLInputElement>(null);
@@ -35,19 +39,28 @@ export function Dashboard() {
     return { todays: sortTasks(todays, 'due'), overdue, doneToday, upcoming };
   }, [tasks, today]);
 
-  const activeProjects = useMemo(
-    () =>
-      projects
-        .filter((p) => p.status === 'active')
-        .map((p) => ({ project: p, progress: projectProgress(tasks, p.id) }))
-        .slice(0, 4),
-    [projects, tasks],
-  );
+  // Progreso de hoy por área de vida
+  const areaCards = useMemo(() => {
+    return categories
+      .map((c) => {
+        const pending = stats.todays.filter((t) => t.categoryId === c.id).length;
+        const done = stats.doneToday.filter((t) => t.categoryId === c.id).length;
+        const open = tasks.filter((t) => t.status === 'open' && t.categoryId === c.id).length;
+        return { c, pending, done, total: pending + done, open };
+      })
+      .filter((a) => a.total > 0 || a.open > 0);
+  }, [categories, stats, tasks]);
+
+  const habitsToday = habits.filter((h) => !h.archived && isScheduled(h, today));
+  const habitDoneToday = useMemo(() => new Set(habitLogs.filter((l) => l.date === today).map((l) => l.habitId)), [habitLogs, today]);
+  const streak = useMemo(() => dayStreak(activeDays(tasks, habitLogs), today), [tasks, habitLogs, today]);
+  const activeGoals = goals.filter((g) => g.status === 'active').slice(0, 3);
 
   const totalToday = stats.todays.length + stats.doneToday.length;
   const progress = totalToday ? stats.doneToday.length / totalToday : 0;
   const subtitle = SUBTITLES[Number(today.slice(8, 10)) % SUBTITLES.length];
   const name = settings.userName.trim();
+  const g = greeting();
 
   const submitQuick = async () => {
     const t = quick.trim();
@@ -65,11 +78,52 @@ export function Dashboard() {
       <header className="hero">
         <p className="eyebrow">{formatLong(today)}</p>
         <h1 className="display hero-title" tabIndex={-1} data-page-title>
-          {greeting()}
-          {name ? `, ${name}` : ''}
+          {g.text}
+          {name ? `, ${name}` : ''} <span aria-hidden="true">{g.emoji}</span>
         </h1>
         <p className="hero-sub">{subtitle}</p>
+        {streak > 0 && (
+          <p className="streak-pill">
+            <Flame size={16} aria-hidden="true" /> {streak === 1 ? '¡Empezaste tu racha!' : `${streak} días seguidos avanzando`}
+          </p>
+        )}
       </header>
+
+      {areaCards.length > 0 && (
+        <section className="area-grid" aria-label="Tus áreas hoy">
+          {areaCards.map(({ c, pending, done, total, open }) => (
+            <button
+              key={c.id}
+              type="button"
+              className="area-card"
+              style={{ '--area': c.color } as CSSProperties}
+              onClick={() => (total ? navigate({ name: 'today' }) : openQuickAdd({ categoryId: c.id, todayDate: today }))}
+            >
+              <span className="area-card-top">
+                <span className="area-emoji" aria-hidden="true">
+                  {c.emoji}
+                </span>
+                <span className="area-name">{c.name}</span>
+              </span>
+              {total ? (
+                <>
+                  <span className="area-count">
+                    {done} de {total} hoy {done === total && '🎉'}
+                  </span>
+                  <span className="area-bar" aria-hidden="true">
+                    <span style={{ width: `${(done / total) * 100}%` }} />
+                  </span>
+                </>
+              ) : (
+                <span className="area-count muted">
+                  {open} pendiente{open === 1 ? '' : 's'} · <Plus size={12} aria-hidden="true" /> para hoy
+                </span>
+              )}
+              {pending > 0 && <span className="sr-only">{pending} por hacer</span>}
+            </button>
+          ))}
+        </section>
+      )}
 
       <div className="dash-grid">
         <section className="card card-today" aria-labelledby="dash-today">
@@ -86,7 +140,11 @@ export function Dashboard() {
             <ProgressRing value={progress} label={`Progreso de hoy: ${stats.doneToday.length} de ${totalToday} tareas`} />
             <div>
               <p className="summary-big">
-                {stats.todays.length === 0 ? 'Todo en orden' : `${stats.todays.length} ${stats.todays.length === 1 ? 'pendiente' : 'pendientes'}`}
+                {stats.todays.length === 0
+                  ? stats.doneToday.length
+                    ? '¡Todo listo! 🎉'
+                    : 'Día despejado'
+                  : `${stats.todays.length} por hacer`}
               </p>
               <p className="muted">
                 {stats.doneToday.length} completada{stats.doneToday.length === 1 ? '' : 's'} hoy
@@ -94,7 +152,7 @@ export function Dashboard() {
                   <>
                     {' · '}
                     <span className="text-danger">
-                      {stats.overdue.length} vencida{stats.overdue.length === 1 ? '' : 's'}
+                      {stats.overdue.length} pendiente{stats.overdue.length === 1 ? '' : 's'} de días anteriores
                     </span>
                   </>
                 )}
@@ -134,8 +192,8 @@ export function Dashboard() {
             tasks={stats.todays.slice(0, 6)}
             label="Pendientes de hoy"
             empty={
-              <EmptyState title="Un día despejado">
-                No hay pendientes para hoy. Disfruta el espacio o planea algo bonito.
+              <EmptyState title={stats.doneToday.length ? '¡Lo lograste todo hoy! 🌟' : 'Un día despejado'}>
+                {stats.doneToday.length ? 'Tómate un momento para disfrutarlo.' : 'Añade algo arriba o simplemente disfruta el espacio.'}
               </EmptyState>
             }
           />
@@ -147,10 +205,71 @@ export function Dashboard() {
         </section>
 
         <div className="dash-side">
+          <section className="card" aria-labelledby="dash-habits">
+            <div className="card-head">
+              <h2 id="dash-habits" className="card-title">
+                <Sparkles size={18} aria-hidden="true" /> Hábitos de hoy
+              </h2>
+              <a className="btn btn-link btn-sm" href={routeHref({ name: 'habits' })}>
+                Ver <ArrowRight size={14} aria-hidden="true" />
+              </a>
+            </div>
+            {habitsToday.length === 0 ? (
+              <p className="muted small">
+                {habits.length ? 'Hoy no toca ningún hábito. ¡Descansa! 🌙' : <a href={routeHref({ name: 'habits' })}>Crea tu primer hábito</a>}
+              </p>
+            ) : (
+              <div className="habit-strip">
+                {habitsToday.map((h) => (
+                  <div key={h.id} className="habit-strip-item">
+                    <HabitCheck habit={h} date={today} done={habitDoneToday.has(h.id)} />
+                    <span className="habit-strip-name">{h.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="card" aria-labelledby="dash-goals">
+            <div className="card-head">
+              <h2 id="dash-goals" className="card-title">
+                <Target size={18} aria-hidden="true" /> Mis metas
+              </h2>
+              <a className="btn btn-link btn-sm" href={routeHref({ name: 'goals' })}>
+                Ver <ArrowRight size={14} aria-hidden="true" />
+              </a>
+            </div>
+            {activeGoals.length === 0 ? (
+              <p className="muted small">
+                <a href={routeHref({ name: 'goals' })}>Define una meta</a> y mira cómo avanzas.
+              </p>
+            ) : (
+              <ul className="mini-projects">
+                {activeGoals.map((goal) => {
+                  const p = goalProgress(goal, tasks);
+                  return (
+                    <li key={goal.id}>
+                      <a href={routeHref({ name: 'goals' })} className="mini-project" style={{ '--p-color': goal.color } as CSSProperties}>
+                        <span className="mini-project-top">
+                          <span aria-hidden="true">{goal.emoji}</span>
+                          <span className="mini-project-name">{goal.title}</span>
+                          <span className="muted small">{p.pct}%</span>
+                        </span>
+                        <ProgressBar value={p.pct / 100} label={`Avance de ${goal.title}`} />
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <JournalCard date={today} compact />
+
           <section className="card" aria-labelledby="dash-upcoming">
             <div className="card-head">
               <h2 id="dash-upcoming" className="card-title">
-                <CalendarRange size={18} aria-hidden="true" /> Próximos vencimientos
+                <CalendarRange size={18} aria-hidden="true" /> Próximos días
               </h2>
               <a className="btn btn-link btn-sm" href={routeHref({ name: 'upcoming' })}>
                 Ver <ArrowRight size={14} aria-hidden="true" />
@@ -169,42 +288,11 @@ export function Dashboard() {
             )}
           </section>
 
-          <section className="card" aria-labelledby="dash-projects">
-            <div className="card-head">
-              <h2 id="dash-projects" className="card-title">
-                <FolderClosed size={18} aria-hidden="true" /> Proyectos activos
-              </h2>
-              <a className="btn btn-link btn-sm" href={routeHref({ name: 'projects' })}>
-                Ver <ArrowRight size={14} aria-hidden="true" />
-              </a>
-            </div>
-            {activeProjects.length === 0 ? (
-              <p className="muted small">
-                Aún no hay proyectos. <a href={routeHref({ name: 'projects' })}>Crea el primero</a>.
-              </p>
-            ) : (
-              <ul className="mini-projects">
-                {activeProjects.map(({ project, progress: pr }) => (
-                  <li key={project.id}>
-                    <a href={routeHref({ name: 'project', id: project.id })} className="mini-project">
-                      <span className="mini-project-top">
-                        <span className="dot" style={{ background: project.color }} aria-hidden="true" />
-                        <span className="mini-project-name">{project.name}</span>
-                        <span className="muted small">{pr.pct}%</span>
-                      </span>
-                      <ProgressBar value={pr.pct / 100} label={`Avance de ${project.name}`} />
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <a className="card card-link review-link" href={routeHref({ name: 'review' })}>
+          <a className="card card-link review-link" href={routeHref({ name: 'achievements' })}>
             <Leaf size={18} aria-hidden="true" />
             <span>
-              <strong>Revisión semanal</strong>
-              <span className="muted small"> · un momento para mirar la semana con calma</span>
+              <strong>Mis logros</strong>
+              <span className="muted small"> · mira todo lo que has avanzado</span>
             </span>
             <ArrowRight size={16} aria-hidden="true" />
           </a>

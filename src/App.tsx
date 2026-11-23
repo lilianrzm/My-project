@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { useData } from './state/data';
 import { useUI } from './state/ui';
@@ -7,7 +7,6 @@ import { BottomNav, Sidebar } from './components/Navigation';
 import { TaskDetailPanel } from './components/TaskDetail';
 import { QuickAdd } from './components/QuickAdd';
 import { ConfirmDialog, Toasts } from './components/ui';
-import { ClosureDialog } from './components/Closure';
 import { PwaStatus } from './pwa/PwaStatus';
 import { Dashboard } from './pages/Dashboard';
 import { InboxPage, TodayPage, UpcomingPage } from './pages/Lists';
@@ -16,9 +15,10 @@ import { CalendarPage } from './pages/Calendar';
 import { CompletedPage, SearchPage } from './pages/Completed';
 import { ReviewPage } from './pages/Review';
 import { SettingsPage } from './pages/Settings';
-
-// Análisis (gráficas, tabla y Excel) se carga solo al abrirla: el arranque sigue siendo ligero.
-const AnalysisPage = lazy(() => import('./pages/Analysis').then((m) => ({ default: m.AnalysisPage })));
+import { HabitsPage } from './pages/Habits';
+import { GoalsPage } from './pages/Goals';
+import { AchievementsPage } from './pages/Achievements';
+import { setCelebrations } from './celebrate';
 import { applyAppearance, isPreviewing } from './theme';
 
 function Page() {
@@ -38,12 +38,12 @@ function Page() {
       return <CalendarPage />;
     case 'completed':
       return <CompletedPage />;
-    case 'analysis':
-      return (
-        <Suspense fallback={<div className="loading" aria-busy="true" aria-label="Cargando análisis" />}>
-          <AnalysisPage />
-        </Suspense>
-      );
+    case 'habits':
+      return <HabitsPage />;
+    case 'goals':
+      return <GoalsPage />;
+    case 'achievements':
+      return <AchievementsPage />;
     case 'review':
       return <ReviewPage />;
     case 'search':
@@ -64,7 +64,9 @@ const TITLES: Record<string, string> = {
   project: 'Proyecto',
   calendar: 'Calendario',
   completed: 'Completadas',
-  analysis: 'Análisis',
+  habits: 'Hábitos',
+  goals: 'Metas',
+  achievements: 'Mis logros',
   review: 'Revisión semanal',
   search: 'Buscar',
   settings: 'Configuración',
@@ -81,6 +83,8 @@ export function App() {
   useEffect(() => {
     if (!isPreviewing()) applyAppearance(settings.appearance, true);
   }, [settings.appearance]);
+
+  useEffect(() => setCelebrations(settings.celebrations), [settings.celebrations]);
 
   // Al cambiar de sección: volver arriba, actualizar el título y mover el foco al encabezado (lectores de pantalla)
   useEffect(() => {
@@ -115,7 +119,6 @@ export function App() {
         <Plus size={26} aria-hidden="true" />
       </button>
       <QuickAdd />
-      <ClosureDialog />
       <ConfirmDialog />
       <Toasts />
     </div>

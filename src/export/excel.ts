@@ -2,7 +2,8 @@ import { buildXlsx, type CellValue, type Sheet } from './xlsx';
 import { allColumns, type RecordContext } from '../domain/records';
 import type { Metrics } from '../domain/analytics';
 import { localDateOf } from '../domain/selectors';
-import type { Task } from '../domain/types';
+import { bestHabitStreak, goalProgress, habitRate, habitStreak, logSet } from '../domain/personal';
+import type { Goal, Habit, HabitLog, Task } from '../domain/types';
 
 export interface ExcelSummary {
   metrics: Metrics;
@@ -10,17 +11,30 @@ export interface ExcelSummary {
   scope: 'filtered' | 'all';
 }
 
-/** Libro con 3 hojas: Actividades (1 fila por actividad principal), Subtareas y Resumen. */
-export function buildActivitiesWorkbook(tasks: Task[], ctx: RecordContext, summary: ExcelSummary): Uint8Array {
+export interface PersonalData {
+  goals: Goal[];
+  habits: Habit[];
+  habitLogs: HabitLog[];
+  today: string;
+}
+
+const GOAL_STATUS: Record<Goal['status'], string> = { active: 'En camino', achieved: 'Lograda', archived: 'Archivada' };
+const GOAL_KIND: Record<Goal['kind'], string> = { count: 'Número', tasks: 'Con pasos', check: 'Sí / no' };
+
+/**
+ * Libro de Excel: Tareas (una fila por tarea principal), Subtareas (vinculadas por ID),
+ * Metas, Hábitos y Resumen. No incluye documentos adjuntos.
+ */
+export function buildActivitiesWorkbook(tasks: Task[], ctx: RecordContext, summary: ExcelSummary, personal?: PersonalData): Uint8Array {
   const cols = allColumns(ctx.customFields);
   const activities: Sheet = {
-    name: 'Actividades',
+    name: 'Tareas',
     header: true,
     widths: cols.map((c) => c.width ?? 16),
     rows: [cols.map((c) => c.label), ...tasks.map((t) => cols.map((c) => c.get(t, ctx)))],
   };
 
-  const subRows: CellValue[][] = [['ID actividad', 'Actividad', 'Orden', 'ID subtarea', 'Subtarea', 'Estado', 'Fecha de creación', 'Fecha de ejecución']];
+  const subRows: CellValue[][] = [['ID tarea', 'Tarea', 'Orden', 'ID subtarea', 'Subtarea', 'Estado', 'Fecha de creación', 'Fecha en que se completó']];
   for (const t of tasks) {
     t.subtasks.forEach((s, i) => {
       subRows.push([
@@ -29,49 +43,92 @@ export function buildActivitiesWorkbook(tasks: Task[], ctx: RecordContext, summa
         i + 1,
         s.id,
         s.title,
-        s.done ? 'Completada' : 'Pendiente',
+        s.done ? 'Hecha' : 'Pendiente',
         s.createdAt ? { date: localDateOf(s.createdAt) } : null,
         s.completedAt ? { date: localDateOf(s.completedAt) } : null,
       ]);
     });
   }
-  const subtasks: Sheet = { name: 'Subtareas', header: true, widths: [38, 40, 8, 38, 40, 13, 14, 14], rows: subRows };
+  const sheets: Sheet[] = [activities, { name: 'Subtareas', header: true, widths: [38, 40, 8, 38, 40, 12, 14, 14], rows: subRows }];
+
+  if (personal) {
+    const catName = (id: string | null) => (id ? ctx.categoryById.get(id)?.name ?? '' : '');
+    sheets.push({
+      name: 'Metas',
+      header: true,
+      widths: [36, 8, 16, 14, 12, 12, 12, 10, 12, 14, 14, 40],
+      rows: [
+        ['Meta', 'Emoji', 'Área', 'Tipo', 'Avance', 'Objetivo', 'Unidad', '%', 'Estado', 'Fecha límite', 'Lograda el', '¿Por qué?'],
+        ...personal.goals.map((g) => {
+          const p = goalProgress(g, tasks);
+          return [
+            g.title,
+            g.emoji,
+            catName(g.categoryId),
+            GOAL_KIND[g.kind],
+            p.value,
+            p.total,
+            g.unit,
+            p.pct,
+            GOAL_STATUS[g.status],
+            g.dueDate ? { date: g.dueDate } : null,
+            g.achievedAt ? { date: localDateOf(g.achievedAt) } : null,
+            g.why,
+          ] as CellValue[];
+        }),
+      ],
+    });
+    const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    sheets.push({
+      name: 'Hábitos',
+      header: true,
+      widths: [32, 8, 16, 24, 12, 12, 16, 14, 12],
+      rows: [
+        ['Hábito', 'Emoji', 'Área', 'Días', 'Racha actual', 'Mejor racha', '% últimos 30 días', 'Veces cumplido', 'Estado'],
+        ...personal.habits.map((h) => {
+          const done = logSet(personal.habitLogs, h.id);
+          const rate = habitRate(h, done, personal.today, 30);
+          return [
+            h.title,
+            h.emoji,
+            catName(h.categoryId),
+            h.weekdays.length ? h.weekdays.map((d) => DAYS[d]).join(', ') : 'Todos los días',
+            habitStreak(h, done, personal.today),
+            bestHabitStreak(h, done, personal.today),
+            rate,
+            done.size,
+            h.archived ? 'Pausado' : 'Activo',
+          ] as CellValue[];
+        }),
+      ],
+    });
+  }
 
   const m = summary.metrics;
-  const n = (v: number | null, suffix = '') => (v === null ? 'Sin datos suficientes' : suffix ? `${v}${suffix}` : v);
+  const n = (v: number | null) => (v === null ? 'Sin datos suficientes' : v);
   const res: CellValue[][] = [
-    ['The Daily Edit — Resumen de exportación', ''],
+    ['The Daily Edit — Resumen', ''],
     ['Fecha de exportación', { date: localDateOf(new Date().toISOString()) }],
-    ['Alcance', summary.scope === 'filtered' ? 'Registros filtrados' : 'Todos los registros'],
-    ['Actividades exportadas', tasks.length],
-    [],
-    ['Filtros aplicados', ''],
+    ['Tareas exportadas', tasks.length],
     ...summary.filters.map(([k, v]) => [k, v] as CellValue[]),
     [],
     ['Indicador', 'Valor'],
-    ['Actividades principales creadas', m.created],
-    ['Actividades principales completadas', m.completed],
-    ['Actividades pendientes (hoy)', m.pending],
-    ['Actividades vencidas (hoy)', m.overdue],
-    ['Actividades canceladas', m.cancelled],
-    ['Cumplimiento de plazos (%)', n(m.onTimePct)],
-    ['  Base: concluidas con vencimiento', m.onTimeBase],
-    ['Tiempo promedio de atención (días)', n(m.avgDays)],
-    ['  Base: concluidas con fechas válidas', m.avgDaysBase],
-    ['Subtareas ejecutadas', m.subtasksDone],
-    ['Promedio de subtareas por actividad', n(m.avgSubtasks)],
+    ['Tareas creadas', m.created],
+    ['Tareas completadas', m.completed],
+    ['Tareas pendientes (hoy)', m.pending],
+    ['Tareas con fecha pasada (hoy)', m.overdue],
+    ['Tareas canceladas', m.cancelled],
+    ['Completadas a tiempo (%)', n(m.onTimePct)],
+    ['Días promedio hasta completar', n(m.avgDays)],
+    ['Subtareas hechas', m.subtasksDone],
+    ['Subtareas por tarea (promedio)', n(m.avgSubtasks)],
     [],
-    ['Completadas por resultado', ''],
-    ...m.byResult.map((b) => [b.label, b.value] as CellValue[]),
-    [],
-    ['Fórmulas', ''],
-    ['Cumplimiento de plazos', 'Concluidas con fecha de conclusión ≤ vencimiento / concluidas con vencimiento y conclusión válidos × 100'],
-    ['Tiempo promedio de atención', 'Σ días calendario de creación a conclusión / nº de concluidas con fechas válidas'],
-    ['Promedio de subtareas', 'Nº de subtareas del conjunto / nº de actividades principales del conjunto'],
-    ['Fecha de conclusión', 'Fecha efectiva de atención si se registró; si no, fecha en que se marcó completada'],
-    ['Unidad de análisis', 'La actividad principal. Las subtareas no se cuentan como actividades.'],
+    ['Cómo se cuenta', ''],
+    ['Unidad', 'Cada tarea principal cuenta una vez; sus subtareas se cuentan aparte.'],
+    ['Completadas a tiempo', 'Completadas en o antes de su fecha ÷ completadas que tenían fecha × 100'],
+    ['Días promedio', 'Días calendario de la creación a la finalización, en promedio'],
   ];
-  const resumen: Sheet = { name: 'Resumen', widths: [42, 70], rows: res };
+  sheets.push({ name: 'Resumen', widths: [40, 70], rows: res });
 
-  return buildXlsx([activities, subtasks, resumen]);
+  return buildXlsx(sheets);
 }

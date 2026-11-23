@@ -15,7 +15,9 @@ export type RouteName =
   | 'project'
   | 'calendar'
   | 'completed'
-  | 'analysis'
+  | 'habits'
+  | 'goals'
+  | 'achievements'
   | 'review'
   | 'search'
   | 'settings';
@@ -25,7 +27,7 @@ export interface Route {
   id?: string;
 }
 
-const ROUTES: RouteName[] = ['dashboard', 'inbox', 'today', 'upcoming', 'projects', 'project', 'calendar', 'completed', 'analysis', 'review', 'search', 'settings'];
+const ROUTES: RouteName[] = ['dashboard', 'inbox', 'today', 'upcoming', 'projects', 'project', 'calendar', 'completed', 'habits', 'goals', 'achievements', 'review', 'search', 'settings'];
 
 export function parseHash(hash: string): Route {
   const [, name, id] = hash.replace(/^#/, '').split('/');
@@ -53,9 +55,6 @@ interface UIState {
   today: string;
   detailExpanded: boolean;
   setDetailExpanded: (v: boolean) => void;
-  /** Actividad cuyo registro de cierre está abierto. */
-  closureTaskId: string | null;
-  openClosure: (id: string | null) => void;
 }
 
 const UIContext = createContext<UIState | null>(null);
@@ -83,7 +82,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [quickAdd, setQuickAdd] = useState<{ open: boolean; defaults: Partial<TaskDraft> }>({ open: false, defaults: {} });
   const today = useLiveToday();
   const [detailExpanded, setDetailExpanded] = useState(false);
-  const [closureTaskId, openClosure] = useState<string | null>(null);
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash(window.location.hash));
@@ -112,10 +110,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
       today,
       detailExpanded,
       setDetailExpanded,
-      closureTaskId,
-      openClosure,
     }),
-    [route, navigate, selectedTaskId, quickAdd, openQuickAdd, closeQuickAdd, today, detailExpanded, closureTaskId],
+    [route, navigate, selectedTaskId, quickAdd, openQuickAdd, closeQuickAdd, today, detailExpanded],
   );
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;
 }

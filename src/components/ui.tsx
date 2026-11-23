@@ -452,10 +452,10 @@ export function ListToolbar({
             </select>
           </label>
           <label className="field-inline">
-            <span>Categoría</span>
+            <span>Área</span>
             <select value={filter.categoryId} onChange={(e) => onFilter({ ...filter, categoryId: e.target.value })}>
               <option value="any">Todas</option>
-              <option value="none">Sin categoría</option>
+              <option value="none">Sin área</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

@@ -7,7 +7,8 @@
  *  - ZIP completo (`the-daily-edit-respaldo-completo-AAAA-MM-DD.zip`): `backup.json` (mismo formato)
  *    + carpeta `files/` con cada documento adjunto, nombrado por su id.
  *
- * Formato JSON (formatVersion 2; la app sigue aceptando la versión 1):
+ * Formato JSON (formatVersion 3; la app sigue aceptando las versiones 1 y 2).
+ * v3 añade: goals, habits, habitLogs, journal.
  * {
  *   "format": "the-daily-edit-backup", "formatVersion": 2, "appVersion": "2.0.0",
  *   "schemaVersion": 2, "exportedAt": "…", "includesFiles": false,
@@ -26,13 +27,17 @@
  */
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import { db, SCHEMA_VERSION } from './db';
-import type { Activity, Attachment, Category, CustomField, FileBlob, Project, Settings, Tag, Task } from '../domain/types';
+import type { Activity, Attachment, Category, CustomField, FileBlob, Goal, Habit, HabitLog, JournalEntry, Project, Settings, Tag, Task } from '../domain/types';
 import {
   ValidationError,
   normalizeActivity,
   normalizeAttachment,
   normalizeCategory,
   normalizeCustomField,
+  normalizeGoal,
+  normalizeHabit,
+  normalizeHabitLog,
+  normalizeJournal,
   normalizeProject,
   normalizeSettings,
   normalizeTag,
@@ -41,7 +46,7 @@ import {
 import { todayISO } from '../domain/dates';
 
 export const BACKUP_FORMAT = 'the-daily-edit-backup';
-export const BACKUP_FORMAT_VERSION = 2;
+export const BACKUP_FORMAT_VERSION = 3;
 export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
 export const MAX_ZIP_BYTES = 500 * 1024 * 1024;
 
@@ -54,6 +59,10 @@ export interface BackupData {
   activity: Activity[];
   customFields: CustomField[];
   attachments: Attachment[];
+  goals: Goal[];
+  habits: Habit[];
+  habitLogs: HabitLog[];
+  journal: JournalEntry[];
 }
 
 export interface BackupFile {
@@ -74,7 +83,7 @@ export interface ParsedBackup {
   warnings: string[];
 }
 
-const ALL_TABLES = () => [db.tasks, db.projects, db.categories, db.tags, db.settings, db.activity, db.customFields, db.attachments];
+const ALL_TABLES = () => [db.tasks, db.projects, db.categories, db.tags, db.settings, db.activity, db.customFields, db.attachments, db.goals, db.habits, db.habitLogs, db.journal];
 
 export async function collectData(): Promise<BackupData> {
   return db.transaction('r', ALL_TABLES(), async () => ({
@@ -86,6 +95,10 @@ export async function collectData(): Promise<BackupData> {
     activity: await db.activity.toArray(),
     customFields: await db.customFields.toArray(),
     attachments: await db.attachments.toArray(),
+    goals: await db.goals.toArray(),
+    habits: await db.habits.toArray(),
+    habitLogs: await db.habitLogs.toArray(),
+    journal: await db.journal.toArray(),
   }));
 }
 
@@ -216,6 +229,12 @@ export function parseBackup(text: string): ParsedBackup {
   const taskIds = new Set(tasks.map((t) => t.id));
   const attachments = list('attachments', (v) => normalizeAttachment(v)).filter((a) => taskIds.has(a.taskId));
   const settings = normalizeSettings(d.settings);
+  const goals = list('goals', (v) => normalizeGoal(v));
+  const habits = list('habits', (v) => normalizeHabit(v));
+  const habitIds = new Set(habits.map((h) => h.id));
+  const habitLogs = list('habitLogs', (v) => normalizeHabitLog(v)).filter((l) => habitIds.has(l.habitId));
+  const journal = list('journal', (v) => normalizeJournal(v)).map(({ id: _id, ...j }) => j);
+  const goalIds = new Set(goals.map((g) => g.id));
 
   // Integridad referencial dentro del propio archivo
   const projectIds = new Set(projects.map((p) => p.id));
@@ -231,6 +250,7 @@ export function parseBackup(text: string): ParsedBackup {
       t.categoryId = null;
       orphans++;
     }
+    if (t.goalId && !goalIds.has(t.goalId)) t.goalId = null;
     const before = t.tagIds.length;
     t.tagIds = t.tagIds.filter((id) => tagIds.has(id));
     orphans += before - t.tagIds.length;
@@ -248,7 +268,7 @@ export function parseBackup(text: string): ParsedBackup {
       exportedAt: typeof r.exportedAt === 'string' ? r.exportedAt : null,
       includesFiles,
     },
-    data: { tasks, projects, categories, tags, settings, activity, customFields, attachments },
+    data: { tasks, projects, categories, tags, settings, activity, customFields, attachments, goals, habits, habitLogs, journal },
     files: new Map(),
     warnings,
   };
@@ -299,7 +319,11 @@ export async function importBackup(parsed: ParsedBackup, mode: 'merge' | 'replac
       });
 
     if (mode === 'replace') {
-      await Promise.all([db.tasks.clear(), db.projects.clear(), db.categories.clear(), db.tags.clear(), db.activity.clear(), db.customFields.clear(), db.attachments.clear()]);
+      await Promise.all([db.tasks.clear(), db.projects.clear(), db.categories.clear(), db.tags.clear(), db.activity.clear(), db.customFields.clear(), db.attachments.clear(), db.goals.clear(), db.habits.clear(), db.habitLogs.clear(), db.journal.clear()]);
+      await db.goals.bulkAdd(incoming.goals);
+      await db.habits.bulkAdd(incoming.habits);
+      await db.habitLogs.bulkPut(incoming.habitLogs);
+      await db.journal.bulkPut(incoming.journal);
       const atts = attachmentsUsable(incoming.attachments);
       await db.tasks.bulkAdd(incoming.tasks);
       await db.projects.bulkAdd(incoming.projects);
@@ -311,7 +335,8 @@ export async function importBackup(parsed: ParsedBackup, mode: 'merge' | 'replac
       await db.attachments.bulkAdd(atts);
       await db.settings.put({ key: 'settings', value: incoming.settings });
       await db.meta.put({ key: 'seeded', value: new Date().toISOString() });
-      const total = incoming.tasks.length + incoming.projects.length + incoming.categories.length + incoming.tags.length + incoming.customFields.length;
+      const total =
+        incoming.tasks.length + incoming.projects.length + incoming.categories.length + incoming.tags.length + incoming.customFields.length + incoming.goals.length + incoming.habits.length;
       return { mode, added: total, updated: 0, unchanged: 0, files: atts.length };
     }
 
@@ -345,7 +370,7 @@ export async function importBackup(parsed: ParsedBackup, mode: 'merge' | 'replac
     await db.tags.bulkAdd(tagsToAdd);
 
     async function mergeTable<T extends { id: string; updatedAt: string }>(
-      table: typeof db.projects | typeof db.categories | typeof db.tasks | typeof db.customFields,
+      table: typeof db.projects | typeof db.categories | typeof db.tasks | typeof db.customFields | typeof db.goals | typeof db.habits,
       items: T[],
     ) {
       const t = table as unknown as { bulkGet(ids: string[]): Promise<(T | undefined)[]>; bulkPut(items: T[]): Promise<unknown> };
@@ -369,11 +394,21 @@ export async function importBackup(parsed: ParsedBackup, mode: 'merge' | 'replac
     await mergeTable(db.projects, incoming.projects);
     await mergeTable(db.categories, incoming.categories);
     await mergeTable(db.customFields, incoming.customFields);
+    await mergeTable(db.goals, incoming.goals);
+    await mergeTable(db.habits, incoming.habits);
+    // Registros de hábitos: el id es hábito+día, así que nunca se duplican
+    const habitIdsNow = new Set((await db.habits.toCollection().primaryKeys()) as string[]);
+    await db.habitLogs.bulkPut(incoming.habitLogs.filter((l) => habitIdsNow.has(l.habitId)));
+    // Diario: gana la entrada modificada más recientemente
+    const localJournal = await db.journal.bulkGet(incoming.journal.map((j) => j.date));
+    await db.journal.bulkPut(incoming.journal.filter((j, i) => !localJournal[i] || newer(j, localJournal[i]!)));
 
     const projectIds = new Set((await db.projects.toCollection().primaryKeys()) as string[]);
     const categoryIds = new Set((await db.categories.toCollection().primaryKeys()) as string[]);
+    const goalIdsNow = new Set((await db.goals.toCollection().primaryKeys()) as string[]);
     const tasks = incoming.tasks.map((t) => ({
       ...t,
+      goalId: t.goalId && goalIdsNow.has(t.goalId) ? t.goalId : null,
       projectId: t.projectId && projectIds.has(t.projectId) ? t.projectId : null,
       categoryId: t.categoryId && categoryIds.has(t.categoryId) ? t.categoryId : null,
       tagIds: [...new Set(t.tagIds.map((id) => tagMap.get(id) ?? id))],
@@ -411,7 +446,11 @@ export async function restorePreImportSnapshot(): Promise<boolean> {
   if (!snap) return false;
   await db.transaction('rw', [...ALL_TABLES(), db.files, db.meta], async () => {
     const current = await db.attachments.toArray();
-    await Promise.all([db.tasks.clear(), db.projects.clear(), db.categories.clear(), db.tags.clear(), db.activity.clear(), db.customFields.clear(), db.attachments.clear()]);
+    await Promise.all([db.tasks.clear(), db.projects.clear(), db.categories.clear(), db.tags.clear(), db.activity.clear(), db.customFields.clear(), db.attachments.clear(), db.goals.clear(), db.habits.clear(), db.habitLogs.clear(), db.journal.clear()]);
+    await db.goals.bulkAdd(snap.data.goals ?? []);
+    await db.habits.bulkAdd(snap.data.habits ?? []);
+    await db.habitLogs.bulkPut(snap.data.habitLogs ?? []);
+    await db.journal.bulkPut(snap.data.journal ?? []);
     await db.tasks.bulkAdd(snap.data.tasks);
     await db.projects.bulkAdd(snap.data.projects);
     await db.categories.bulkAdd(snap.data.categories);

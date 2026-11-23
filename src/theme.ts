@@ -12,6 +12,7 @@ import { DEFAULT_APPEARANCE } from './domain/types';
 export const APPEARANCE_MIRROR_KEY = 'tde-appearance';
 
 export const PALETTES: { id: Palette; name: string; bg: string; accent: string; secondary: string }[] = [
+  { id: 'sorbet', name: 'Sorbete', bg: '#FFFAF7', accent: '#EC8FA3', secondary: '#FFE1E8' },
   { id: 'olive', name: 'Olive & Blush', bg: '#FAF9F6', accent: '#81866A', secondary: '#F2DDE2' },
   { id: 'rose', name: 'Rose & Cream', bg: '#FFF9F7', accent: '#AD7785', secondary: '#F4DCE2' },
   { id: 'sage', name: 'Sage & Linen', bg: '#FAF9F3', accent: '#718878', secondary: '#E5EAD9' },

@@ -6,6 +6,10 @@ import { db } from './db';
 import { todayISO } from '../domain/dates';
 import { nextOccurrenceDate } from '../domain/recurrence';
 import type {
+  Goal,
+  Habit,
+  JournalEntry,
+  Mood,
   Activity,
   ActivityType,
   Attachment,
@@ -22,7 +26,7 @@ import type {
   Task,
 } from '../domain/types';
 import { DEFAULT_SETTINGS } from '../domain/types';
-import { LIMITS, newId, normalizeClosure, normalizeCustomField, normalizeSettings, normalizeTask } from '../domain/validate';
+import { LIMITS, newId, normalizeClosure, normalizeCustomField, normalizeGoal, normalizeHabit, normalizeSettings, normalizeTask } from '../domain/validate';
 import { localDateOf } from '../domain/selectors';
 
 /** Error de una regla de negocio, con un mensaje listo para mostrar. */
@@ -44,13 +48,14 @@ const nowTs = () => new Date().toISOString();
 /* Inicialización                                                       */
 /* ------------------------------------------------------------------ */
 
-export const DEFAULT_CATEGORIES: { id: string; name: string; color: string }[] = [
-  { id: 'cat-trabajo', name: 'Trabajo', color: '#81866A' },
-  { id: 'cat-personal', name: 'Personal', color: '#D9A9B4' },
-  { id: 'cat-finanzas', name: 'Finanzas', color: '#D4B483' },
-  { id: 'cat-estudios', name: 'Estudios y aprendizaje', color: '#9DB0BF' },
-  { id: 'cat-salud', name: 'Salud y entrenamiento', color: '#A7B09A' },
-  { id: 'cat-proyectos', name: 'Proyectos personales', color: '#B7A6C4' },
+/** Áreas de vida iniciales (editables). El trabajo es un área más. */
+export const DEFAULT_CATEGORIES: { id: string; name: string; emoji: string; color: string }[] = [
+  { id: 'cat-personal', name: 'Personal', emoji: '🌿', color: '#F4A6B8' },
+  { id: 'cat-salud', name: 'Salud y entrenamiento', emoji: '💪', color: '#9FD3A8' },
+  { id: 'cat-estudios', name: 'Estudios y aprendizaje', emoji: '📚', color: '#9DBBE8' },
+  { id: 'cat-finanzas', name: 'Finanzas', emoji: '💸', color: '#F5CF6B' },
+  { id: 'cat-proyectos', name: 'Proyectos personales', emoji: '✨', color: '#B9A3E3' },
+  { id: 'cat-trabajo', name: 'Trabajo', emoji: '💼', color: '#A9B28A' },
 ];
 
 const LEGACY_KEY = 'lista-de-tareas';
@@ -276,10 +281,14 @@ export async function saveClosure(id: string, data: Partial<Closure>): Promise<v
  * Completa una tarea. Si es recurrente, genera la siguiente ocurrencia
  * (ver reglas en domain/recurrence.ts) sin duplicados.
  */
-export async function completeTask(id: string): Promise<{ next: Task | null }> {
+export async function completeTask(id: string, opts: { completeSubtasks?: boolean } = {}): Promise<{ next: Task | null }> {
   return db.transaction('rw', [db.tasks, db.activity], async () => {
-    const task = await db.tasks.get(id);
+    let task = await db.tasks.get(id);
     if (!task || task.status === 'completed') return { next: null };
+    if (opts.completeSubtasks && pendingSubtasks(task) > 0) {
+      const at = nowTs();
+      task = { ...task, subtasks: task.subtasks.map((s) => (s.done ? s : { ...s, done: true, completedAt: at })) };
+    }
     const pending = pendingSubtasks(task);
     if (pending > 0) {
       throw new RuleError(
@@ -510,18 +519,18 @@ export async function undoDeleteProject(d: ProjectDeletion): Promise<void> {
 /* Categorías                                                           */
 /* ------------------------------------------------------------------ */
 
-export async function createCategory(name: string, color: string): Promise<Category> {
+export async function createCategory(name: string, color: string, emoji = '✨'): Promise<Category> {
   const n = name.trim().slice(0, LIMITS.name);
-  if (!n) throw new Error('La categoría necesita un nombre.');
+  if (!n) throw new Error('El área necesita un nombre.');
   const ts = nowTs();
   const last = await db.categories.orderBy('order').last();
-  const c: Category = { id: newId(), name: n, color, order: (last?.order ?? 0) + 1, createdAt: ts, updatedAt: ts };
+  const c: Category = { id: newId(), name: n, emoji, color, order: (last?.order ?? 0) + 1, createdAt: ts, updatedAt: ts };
   await db.categories.add(c);
   return c;
 }
 
-export async function updateCategory(id: string, patch: Partial<Pick<Category, 'name' | 'color'>>): Promise<void> {
-  if (patch.name !== undefined && !patch.name.trim()) throw new Error('La categoría necesita un nombre.');
+export async function updateCategory(id: string, patch: Partial<Pick<Category, 'name' | 'color' | 'emoji'>>): Promise<void> {
+  if (patch.name !== undefined && !patch.name.trim()) throw new Error('El área necesita un nombre.');
   await db.categories.update(id, { ...patch, updatedAt: nowTs() });
 }
 
@@ -761,5 +770,130 @@ export async function restoreAttachment(d: AttachmentDeletion): Promise<void> {
   await db.transaction('rw', [db.attachments, db.files], async () => {
     if (d.file) await db.files.put(d.file);
     await db.attachments.put(d.attachment);
+  });
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Metas                                                                */
+/* ------------------------------------------------------------------ */
+
+export async function createGoal(g: Pick<Goal, 'title'> & Partial<Goal>): Promise<Goal> {
+  const ts = nowTs();
+  const goal = normalizeGoal({ kind: 'check', target: 1, current: 0, ...g, id: newId(), status: 'active', order: Date.now(), createdAt: ts, updatedAt: ts });
+  await db.goals.add(goal);
+  return goal;
+}
+
+/** Actualiza una meta. Si es de tipo número y alcanza su objetivo, se marca lograda. */
+export async function updateGoal(id: string, patch: Partial<Omit<Goal, 'id' | 'createdAt'>>): Promise<{ achieved: boolean }> {
+  return db.transaction('rw', db.goals, async () => {
+    const cur = await db.goals.get(id);
+    if (!cur) throw new Error('La meta ya no existe.');
+    const ts = nowTs();
+    const next = normalizeGoal({ ...cur, ...patch, id, updatedAt: ts });
+    let achieved = false;
+    if (next.kind === 'count' && next.status === 'active' && next.target > 0 && next.current >= next.target) {
+      next.status = 'achieved';
+      next.achievedAt = ts;
+      achieved = true;
+    }
+    if (next.status === 'achieved' && cur.status !== 'achieved') {
+      next.achievedAt ??= ts;
+      achieved = true;
+    }
+    if (next.status !== 'achieved') next.achievedAt = null;
+    await db.goals.put(next);
+    return { achieved };
+  });
+}
+
+/** Elimina una meta. Sus tareas se conservan (solo pierden el vínculo). */
+export async function deleteGoal(id: string): Promise<{ goal: Goal; taskIds: string[] } | null> {
+  return db.transaction('rw', [db.goals, db.tasks], async () => {
+    const goal = await db.goals.get(id);
+    if (!goal) return null;
+    const tasks = await db.tasks.where('goalId').equals(id).toArray();
+    await db.tasks.bulkPut(tasks.map((t) => ({ ...t, goalId: null })));
+    await db.goals.delete(id);
+    return { goal, taskIds: tasks.map((t) => t.id) };
+  });
+}
+
+export async function restoreGoal(d: { goal: Goal; taskIds: string[] }): Promise<void> {
+  await db.transaction('rw', [db.goals, db.tasks], async () => {
+    await db.goals.put(d.goal);
+    const tasks = (await db.tasks.bulkGet(d.taskIds)).filter((t): t is Task => !!t && t.goalId === null);
+    await db.tasks.bulkPut(tasks.map((t) => ({ ...t, goalId: d.goal.id })));
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Hábitos                                                              */
+/* ------------------------------------------------------------------ */
+
+export async function createHabit(h: Pick<Habit, 'title'> & Partial<Habit>): Promise<Habit> {
+  const ts = nowTs();
+  const habit = normalizeHabit({ weekdays: [], ...h, id: newId(), archived: false, order: Date.now(), createdAt: ts, updatedAt: ts });
+  await db.habits.add(habit);
+  return habit;
+}
+
+export async function updateHabit(id: string, patch: Partial<Omit<Habit, 'id' | 'createdAt'>>): Promise<void> {
+  await db.transaction('rw', db.habits, async () => {
+    const cur = await db.habits.get(id);
+    if (!cur) throw new Error('El hábito ya no existe.');
+    await db.habits.put(normalizeHabit({ ...cur, ...patch, id, updatedAt: nowTs() }));
+  });
+}
+
+/** Marca o desmarca un hábito en un día. Devuelve si quedó cumplido. Nunca duplica registros. */
+export async function toggleHabit(habitId: string, date: string): Promise<boolean> {
+  return db.transaction('rw', db.habitLogs, async () => {
+    const id = `${habitId}:${date}`;
+    if (await db.habitLogs.get(id)) {
+      await db.habitLogs.delete(id);
+      return false;
+    }
+    await db.habitLogs.put({ id, habitId, date, at: nowTs() });
+    return true;
+  });
+}
+
+/** Elimina un hábito y su historial (devuelve copia para deshacer). Archivar es la opción que conserva. */
+export async function deleteHabit(id: string): Promise<{ habit: Habit; logs: import('../domain/types').HabitLog[] } | null> {
+  return db.transaction('rw', [db.habits, db.habitLogs], async () => {
+    const habit = await db.habits.get(id);
+    if (!habit) return null;
+    const logs = await db.habitLogs.where('habitId').equals(id).toArray();
+    await db.habitLogs.bulkDelete(logs.map((l) => l.id));
+    await db.habits.delete(id);
+    return { habit, logs };
+  });
+}
+
+export async function restoreHabit(d: { habit: Habit; logs: import('../domain/types').HabitLog[] }): Promise<void> {
+  await db.transaction('rw', [db.habits, db.habitLogs], async () => {
+    await db.habits.put(d.habit);
+    await db.habitLogs.bulkPut(d.logs);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Diario: ánimo, gratitud y orgullo                                    */
+/* ------------------------------------------------------------------ */
+
+export async function saveJournal(date: string, patch: { mood?: Mood | null; gratitude?: string; proud?: string }): Promise<void> {
+  await db.transaction('rw', db.journal, async () => {
+    const cur: JournalEntry = (await db.journal.get(date)) ?? { date, mood: null, gratitude: '', proud: '', updatedAt: nowTs() };
+    const next: JournalEntry = {
+      ...cur,
+      ...patch,
+      gratitude: (patch.gratitude ?? cur.gratitude).slice(0, LIMITS.description),
+      proud: (patch.proud ?? cur.proud).slice(0, LIMITS.description),
+      date,
+      updatedAt: nowTs(),
+    };
+    await db.journal.put(next);
   });
 }

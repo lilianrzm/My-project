@@ -21,7 +21,7 @@ export function PriorityMark({ priority, withLabel = false }: { priority: Priori
 interface CheckProps {
   checked: boolean;
   label: string;
-  onToggle: () => void;
+  onToggle: (origin?: { x: number; y: number }) => void;
   size?: 'md' | 'sm';
 }
 
@@ -35,7 +35,8 @@ export function CheckButton({ checked, label, onToggle, size = 'md' }: CheckProp
       className={`check check-${size}${checked ? ' is-checked' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
-        onToggle();
+        const r = e.currentTarget.getBoundingClientRect();
+        onToggle({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
       }}
     >
       <span className="check-box" aria-hidden="true">
@@ -58,7 +59,7 @@ export interface TaskRowProps {
   draggable?: boolean;
   dragStyle?: CSSProperties;
   isDragging?: boolean;
-  onToggle: (t: Task) => void;
+  onToggle: (t: Task, origin?: { x: number; y: number }) => void;
   onOpen: (id: string) => void;
   onDragStart?: (id: string, e: ReactPointerEvent) => void;
   onMove?: (id: string, dir: -1 | 1) => void;
@@ -82,7 +83,7 @@ function TaskRowInner(p: TaskRowProps) {
   return (
     <div
       className={`task-row${done || cancelled ? ' is-done' : ''}${cancelled ? ' is-cancelled' : ''}${p.selected ? ' is-selected' : ''}${p.isDragging ? ' is-dragging' : ''}`}
-      style={p.dragStyle}
+      style={{ ...p.dragStyle, ...(p.category ? ({ '--area': p.category.color } as CSSProperties) : {}) }}
       data-task-id={task.id}
       onClick={() => p.onOpen(task.id)}
     >
@@ -100,7 +101,7 @@ function TaskRowInner(p: TaskRowProps) {
       <CheckButton
         checked={done}
         label={done ? `Reabrir: ${task.title}` : cancelled ? `Reactivar: ${task.title}` : `Completar: ${task.title}`}
-        onToggle={() => p.onToggle(task)}
+        onToggle={(o) => p.onToggle(task, o)}
       />
       <button
         type="button"
@@ -158,7 +159,7 @@ function TaskRowInner(p: TaskRowProps) {
           )}
           {p.category && (
             <span className="tag tag-cat" style={{ '--tag-color': p.category.color } as CSSProperties}>
-              {p.category.name}
+              <span aria-hidden="true">{p.category.emoji}</span> {p.category.name}
             </span>
           )}
           {p.tagNames.map((n) => (

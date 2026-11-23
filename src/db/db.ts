@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Activity, Attachment, Category, CustomField, FileBlob, MetaRow, Project, SettingRow, Tag, Task } from '../domain/types';
+import type { Activity, Attachment, Category, CustomField, FileBlob, Goal, Habit, HabitLog, JournalEntry, MetaRow, Project, SettingRow, Tag, Task } from '../domain/types';
 
 /**
  * Base de datos local (IndexedDB) de The Daily Edit.
@@ -10,7 +10,7 @@ import type { Activity, Attachment, Category, CustomField, FileBlob, MetaRow, Pr
  * queda en la versión anterior sin pérdida de datos.
  */
 export const DB_NAME = 'the-daily-edit';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export class DailyEditDB extends Dexie {
   tasks!: EntityTable<Task, 'id'>;
@@ -24,6 +24,10 @@ export class DailyEditDB extends Dexie {
   attachments!: EntityTable<Attachment, 'id'>;
   /** Contenido binario de los adjuntos, separado de los metadatos para consultas ligeras. */
   files!: EntityTable<FileBlob, 'id'>;
+  goals!: EntityTable<Goal, 'id'>;
+  habits!: EntityTable<Habit, 'id'>;
+  habitLogs!: EntityTable<HabitLog, 'id'>;
+  journal!: EntityTable<JournalEntry, 'date'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -70,6 +74,57 @@ export class DailyEditDB extends Dexie {
               }));
             }
           });
+      });
+
+    // v3 (logro personal): metas, hábitos, registro de hábitos y diario.
+    // Solo AÑADE: emoji en las áreas, vínculo opcional tarea → meta.
+    this.version(3)
+      .stores({
+        goals: 'id, status, order',
+        habits: 'id, order',
+        habitLogs: 'id, habitId, date',
+        journal: 'date',
+        tasks: 'id, status, dueDate, projectId, categoryId, completedAt, seriesId, [seriesId+dueDate], *tagIds, updatedAt, goalId',
+      })
+      .upgrade(async (tx) => {
+        const EMOJI: Record<string, string> = {
+          'cat-trabajo': '💼',
+          'cat-personal': '🌿',
+          'cat-finanzas': '💸',
+          'cat-estudios': '📚',
+          'cat-salud': '💪',
+          'cat-proyectos': '✨',
+        };
+        // Colores iniciales más alegres, solo si la persona no los había cambiado
+        const OLD_TO_NEW: Record<string, string> = {
+          '#81866A': '#A9B28A',
+          '#D9A9B4': '#F4A6B8',
+          '#D4B483': '#F5CF6B',
+          '#9DB0BF': '#9DBBE8',
+          '#A7B09A': '#9FD3A8',
+          '#B7A6C4': '#B9A3E3',
+        };
+        await tx
+          .table('categories')
+          .toCollection()
+          .modify((c: Record<string, unknown>) => {
+            c.emoji ??= EMOJI[c.id as string] ?? '✨';
+            if (EMOJI[c.id as string] && typeof c.color === 'string' && OLD_TO_NEW[c.color.toUpperCase()]) {
+              c.color = OLD_TO_NEW[c.color.toUpperCase()];
+            }
+          });
+        await tx
+          .table('tasks')
+          .toCollection()
+          .modify((t: Record<string, unknown>) => {
+            t.goalId ??= null;
+          });
+        // Nueva apariencia alegre solo si seguías con la predeterminada anterior (no se pisa una elección propia)
+        const row = await tx.table('settings').get('settings');
+        const a = row?.value?.appearance;
+        if (row && (!a || (a.font === 'playful' && a.palette === 'olive' && a.radius === 'soft'))) {
+          await tx.table('settings').put({ ...row, value: { ...row.value, appearance: { font: 'playful', palette: 'sorbet', radius: 'round' } } });
+        }
       });
   }
 }

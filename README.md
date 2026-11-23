@@ -22,11 +22,30 @@ Aplicación personal de tareas, proyectos y planificación diaria, diseñada pri
 
 ### Atajos con teclado externo
 
-`N` nueva tarea · `/` o `⌘K` buscar · `⌘S` o `⌘Enter` guardar y cerrar la tarea · `Esc` cerrar · `Alt+↑/↓` mover tarea o subtarea · `G` y luego `H`/`I`/`P`/`C`/`U`/`D`/`A` para ir a Hoy, Inbox, Proyectos, Calendario, Próximamente, Dashboard o Análisis.
+`N` nueva tarea · `/` o `⌘K` buscar · `⌘S` o `⌘Enter` guardar y cerrar la tarea · `Esc` cerrar · `Alt+↑/↓` mover tarea o subtarea · `G` y luego `H`/`I`/`P`/`C`/`U`/`D`/`B`/`M`/`A` para ir a Hoy, Inbox, Proyectos, Calendario, Próximamente, Inicio, Hábitos, Metas o Mis logros.
 
 ---
 
-## Novedades de la versión 2.0
+## Versión 3.0: personal, alegre y enfocada en tus logros
+
+| Área | Qué hay |
+|---|---|
+| **Inicio** | Saludo cálido en español (Buenos días ☀️ / tardes / noches), frase de ánimo, **racha** de días seguidos avanzando, tarjetas de colores por **área de vida** con el avance de hoy, hábitos de hoy, metas en curso y registro rápido de ánimo. |
+| **Áreas de vida** | Las categorías ahora son áreas con **emoji y color** (Personal 🌿, Salud 💪, Estudios 📚, Finanzas 💸, Proyectos ✨, Trabajo 💼). El trabajo es un área más. Se eligen con un toque al crear una tarea. |
+| **Hábitos** | Diarios o en días concretos. Se marcan con un toque, con **racha**, mejor racha, % de los últimos 30 días y vista de la semana. Sugerencias para empezar. Pausar (archivar) sin perder el historial. |
+| **Metas** | Tres tipos: **un número** (12 libros, $20,000), **con pasos** (tareas vinculadas) o **sí/no**. Anillo de progreso, fecha límite, “¿por qué es importante para ti?” y celebración grande al lograrla. |
+| **Mis logros** | Semana, mes o año: tareas completadas, hábitos cumplidos, metas logradas, racha, avance por área, tu **ánimo** de 30 días, tus notas de **gratitud** y una línea de tiempo de momentos. |
+| **Diario** | Cada día: ¿cómo te sientes? (5 emojis), “Hoy agradezco…” y “Mi logro de hoy”. Todo opcional. |
+| **Celebraciones** | Confeti suave y mensajes de ánimo al completar. Se desactivan en Configuración y respetan “Reducir movimiento” del iPad. |
+| **Apariencia** | Nueva paleta alegre **Sorbete** (rosa coral) y esquinas redondeadas por defecto. Si ya tenías la apariencia predeterminada anterior, se actualiza sola; si habías elegido otra, se respeta. |
+
+**Lo que se quitó de la vista (sin borrar datos):** el registro de cierre al completar, los campos personalizados, folio, responsable, fecha de inicio, historial de cambios y la sección Análisis con su tabla. Los datos que ya existieran siguen guardados y viajan en los respaldos. Se conservan las **subtareas**, los **documentos adjuntos** y **Exportar a Excel** (Configuración → Respaldos), ahora con hojas de Tareas, Subtareas, Metas, Hábitos y Resumen.
+
+**Subtareas, más amable:** si completas una tarea con subtareas pendientes, la app pregunta si quieres marcarlas también (“Completar todo”) en lugar de bloquearte.
+
+**Datos:** esquema IndexedDB v3 (añade metas, hábitos, registros de hábitos y diario; solo agrega, no borra). Respaldos formato 3, compatibles con 1 y 2.
+
+## Historial: versión 2.0
 
 | Área | Qué hay |
 |---|---|
@@ -245,6 +264,8 @@ scripts/          Generador de íconos y prueba de extremo a extremo
 ## Pruebas
 
 **Automatizadas (ejecutadas en el entorno de desarrollo):**
+
+- **3.0:** 50 pruebas unitarias (nuevas: migración v2→v3, metas, hábitos y rachas, “Completar todo”, respaldo v3) y 94 comprobaciones de extremo a extremo (nuevas: paleta por defecto, áreas con emoji, captura rápida por área, hábitos y celebración, metas numéricas y con pasos, diario, Mis logros, Excel con metas y hábitos, respaldo v3, metas sin conexión). Además se probó en navegador la actualización real desde la 2.0 publicada: aviso de nueva versión, datos conservados y nueva apariencia aplicada.
 
 - 41 pruebas unitarias. Nuevas en 2.0: migración v1→v2 sin pérdida, bloqueo de cierre con subtareas pendientes, reapertura confirmada, registro de cierre (la fecha efectiva histórica no se sobrescribe), cancelación, historial con valores previos, conversiones de tipo de campos, documentos (alta, tipos no admitidos, deshacer, eliminación en cascada), respaldo ZIP ida y vuelta, respaldos v1, fórmulas de indicadores (subtareas no cuentan como actividades, sin divisiones entre cero, fecha efectiva), Excel válido de 3 hojas con protección contra fórmulas, extracción de .docx y descripción por extracto. Desde 1.0: recurrencias (diaria, semanal con días, cada N semanas, día 31, 29 de febrero, sin acumular vencidas, fecha fin), CRUD, deshacer, reordenar, eliminar categoría/proyecto sin perder tareas, exportar/importar (reemplazo, fusión, unificación de etiquetas, archivos inválidos, referencias rotas), restaurar estado previo, migración de `localStorage`, selectores.
 - Prueba de extremo a extremo en Chromium (Playwright) sobre la versión de producción: 81 comprobaciones. Nuevas en 2.0: vista previa/cancelar/guardar/restablecer apariencia y su aplicación antes de cargar la app, campos personalizados, panel expandido, subtareas y reglas de cierre, registro de cierre, historial, extracto automático de un documento, Hoy agrupado y plegable, indicadores y filtros de Análisis, Excel real (3 hojas, campos personalizados, subtareas sin duplicar), respaldo ZIP con documentos (exportar e importar) y Análisis sin conexión. Desde 1.0: service worker, manifest, crear/editar/completar/deshacer/eliminar, persistencia tras recargar, recurrencia sin duplicados, proyectos y avance, búsqueda, exportar e importar, archivo inválido, texto con HTML mostrado como texto, **modo sin conexión** (abrir, crear y persistir), atajos de teclado y ausencia de desplazamiento horizontal en 1180×820, 820×1180 y 390×844.
